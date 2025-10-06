@@ -11,6 +11,7 @@ class SessionManager(context: Context) {
         const val KEY_COOKIE = "key_cookie"
         const val KEY_USERNAME = "key_username"
         const val KEY_PASSWORD = "key_password"
+        const val KEY_SERVICE_ACCOUNT_JSON = "key_service_account_json"
     }
 
     fun saveAuthData(cookie: String, username: String, password: String) {
@@ -19,6 +20,16 @@ class SessionManager(context: Context) {
         editor.putString(KEY_USERNAME, username)
         editor.putString(KEY_PASSWORD, password)
         editor.apply()
+    }
+
+    fun saveServiceAccountJson(json: String) {
+        val editor = prefs.edit()
+        editor.putString(KEY_SERVICE_ACCOUNT_JSON, json)
+        editor.apply()
+    }
+
+    fun getServiceAccountJson(): String? {
+        return prefs.getString(KEY_SERVICE_ACCOUNT_JSON, null)
     }
 
     fun getCookie(): String? {
@@ -35,7 +46,9 @@ class SessionManager(context: Context) {
 
     fun clearData() {
         val editor = prefs.edit()
-        editor.clear()
+        editor.remove(KEY_COOKIE)
+        editor.remove(KEY_USERNAME)
+        editor.remove(KEY_PASSWORD)
         editor.apply()
     }
 }

@@ -37,6 +37,10 @@ android {
     buildFeatures {
         compose = true
     }
+    packaging {
+        resources.excludes.add("META-INF/INDEX.LIST")
+        resources.excludes.add("META-INF/DEPENDENCIES")
+    }
 }
 
 dependencies {
@@ -50,9 +54,18 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
-    // Retrofit & Gson
-    implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    // Jsoup for HTML parsing
+    implementation("org.jsoup:jsoup:1.21.2")
+
+    // Google Sheets
+    implementation("com.google.apis:google-api-services-sheets:v4-rev20250616-2.0.0")
+    implementation("com.google.auth:google-auth-library-oauth2-http:1.32.0")
+
+    // Gson for JSON serialization
+    implementation("com.google.code.gson:gson:2.13.2")
+
+    // Navigation
+    implementation("androidx.navigation:navigation-compose:2.9.5")
 
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
