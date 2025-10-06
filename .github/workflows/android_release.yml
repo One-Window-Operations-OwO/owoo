@@ -35,12 +35,12 @@ jobs:
       - name: Decode keystore
         run: |
           mkdir -p app
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/release.keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > release.keystore
 
       - name: Build signed release APK
         run: >
           ./gradlew assembleRelease
-          -Pandroid.injected.signing.store.file=app/release.keystore
+          -Pandroid.injected.signing.store.file=release.keystore
           -Pandroid.injected.signing.store.password="${{ secrets.KEYSTORE_PASSWORD }}"
           -Pandroid.injected.signing.key.alias="${{ secrets.KEY_ALIAS }}"
           -Pandroid.injected.signing.key.password="${{ secrets.KEY_PASSWORD }}"
