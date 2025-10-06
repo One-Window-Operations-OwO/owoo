@@ -89,6 +89,25 @@ fun HomeScreen(
                     CircularProgressIndicator()
                 }
 
+                if (uiState.pendingRows.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    val firstRow = uiState.pendingRows.first()
+                    val header = uiState.headerRow
+                    val jsonMap = header.zip(firstRow).toMap()
+                    val jsonPretty = try {
+                        org.json.JSONObject(jsonMap).toString(4)
+                    } catch (e: Exception) {
+                        jsonMap.toString()
+                    }
+
+                    Text(
+                        text = jsonPretty,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(8.dp),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
                 uiState.errorMessage?.let {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(text = it, color = MaterialTheme.colorScheme.error)
