@@ -13,3 +13,5 @@
 .externalNativeBuild
 .cxx
 local.properties
+release.keystore.base64
+release.keystore
