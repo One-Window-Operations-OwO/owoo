@@ -74,9 +74,29 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _uiState.value = _uiState.value.copy(headerRow = header, pendingRows = rows, isLoading = false)
                 cacheManager.savePendingRows(CachedData(header, rows))
+
+                if (rows.isNotEmpty()) {
+                    val phpsessid = sessionManager.getCookie()
+                    if (phpsessid != null) {
+                        fetchRowDetails(rows.first(), phpsessid)
+                    } else {
+                        _uiState.value = _uiState.value.copy(errorMessage = "Session expired. Please login again.")
+                    }
+                }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(errorMessage = e.message, isLoading = false)
                 cacheManager.clearCache()
+            }
+        }
+    }
+
+    fun fetchFirstRowDetails() {
+        if (uiState.value.pendingRows.isNotEmpty()) {
+            val phpsessid = sessionManager.getCookie()
+            if (phpsessid != null) {
+                fetchRowDetails(uiState.value.pendingRows.first(), phpsessid)
+            } else {
+                _uiState.value = _uiState.value.copy(errorMessage = "Session expired. Please login again.")
             }
         }
     }
@@ -90,12 +110,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     throw IllegalStateException("Kolom NPSN tidak ditemukan.")
                 }
                 val npsn = row[npsnIndex]
+
                 val hisenseData = withContext(Dispatchers.IO) {
                     HisenseService.getHisense(npsn, phpsessid)
                 }
-                val datadikData = withContext(Dispatchers.IO) {
-                    DatadikService.getDatadik(hisenseData.q)
+
+                if (hisenseData.error != null) {
+                    throw Exception("Hisense error: ${hisenseData.error}")
                 }
+
+                val datadikData = withContext(Dispatchers.IO) {
+                        DatadikService.getDatadik(npsn)
+                }
+
+                if (datadikData.error != null) {
+                    throw Exception("Datadik error: ${datadikData.error}")
+                }
+
                 _uiState.value = _uiState.value.copy(
                     rowDetails = RowDetails(hisenseData, datadikData),
                     isLoading = false

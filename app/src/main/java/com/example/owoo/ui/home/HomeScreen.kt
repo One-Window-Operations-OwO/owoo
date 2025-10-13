@@ -32,8 +32,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.gson.GsonBuilder
 import kotlinx.coroutines.launch
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.foundation.lazy.LazyColumn
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,7 +63,9 @@ fun HomeScreen(
                 onLogoutClicked = onLogoutClicked,
                 onPickFileClicked = { filePickerLauncher.launch("application/json") },
                 onFetchDataClicked = { homeViewModel.fetchPendingRows(userName) },
-                isFetchDataEnabled = uiState.serviceAccountJson != null && !uiState.isLoading
+                isFetchDataEnabled = uiState.serviceAccountJson != null && !uiState.isLoading,
+                onFetchDetailClicked = { homeViewModel.fetchFirstRowDetails() },
+                isFetchDetailEnabled = uiState.pendingRows.isNotEmpty() && !uiState.isLoading
             )
         }
     ) {
@@ -83,13 +87,43 @@ fun HomeScreen(
                     .padding(paddingValues)
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                verticalArrangement = Arrangement.Top
             ) {
                 if (uiState.isLoading) {
                     CircularProgressIndicator()
                 }
 
-                if (uiState.pendingRows.isNotEmpty()) {
+                uiState.rowDetails?.let { details ->
+                    val gson = GsonBuilder().setPrettyPrinting().create()
+                    val hisenseJson = gson.toJson(details.hisenseData)
+                    val datadikJson = gson.toJson(details.datadikData)
+
+                    LazyColumn {
+                        item {
+                            Text("Hisense Data", style = MaterialTheme.typography.headlineSmall)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = hisenseJson,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(8.dp),
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+                        item {
+                            Text("Datadik Data", style = MaterialTheme.typography.headlineSmall)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = datadikJson,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(8.dp),
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+                    }
+                }
+
+                if (uiState.pendingRows.isNotEmpty() && uiState.rowDetails == null && !uiState.isLoading) {
                     Spacer(modifier = Modifier.height(16.dp))
                     val firstRow = uiState.pendingRows.first()
                     val header = uiState.headerRow
@@ -101,7 +135,7 @@ fun HomeScreen(
                     }
 
                     Text(
-                        text = jsonPretty,
+                        text = "Pending Row:\n$jsonPretty",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(8.dp),
                         color = MaterialTheme.colorScheme.onBackground
@@ -123,7 +157,9 @@ fun AppDrawer(
     onLogoutClicked: () -> Unit,
     onPickFileClicked: () -> Unit,
     onFetchDataClicked: () -> Unit,
-    isFetchDataEnabled: Boolean
+    isFetchDataEnabled: Boolean,
+    onFetchDetailClicked: () -> Unit,
+    isFetchDetailEnabled: Boolean
 ) {
     ModalDrawerSheet {
         Column(
@@ -140,6 +176,10 @@ fun AppDrawer(
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = onFetchDataClicked, enabled = isFetchDataEnabled) {
                 Text("Tarik Data")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = onFetchDetailClicked, enabled = isFetchDetailEnabled) {
+                Text("Tarik Detail")
             }
             Spacer(modifier = Modifier.weight(1f))
             Button(onClick = onLogoutClicked) {
