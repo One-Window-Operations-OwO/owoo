@@ -32,10 +32,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.google.gson.GsonBuilder
 import kotlinx.coroutines.launch
 import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.foundation.lazy.LazyColumn
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,33 +92,7 @@ fun HomeScreen(
                 }
 
                 uiState.rowDetails?.let { details ->
-                    val gson = GsonBuilder().setPrettyPrinting().create()
-                    val hisenseJson = gson.toJson(details.hisenseData)
-                    val datadikJson = gson.toJson(details.datadikData)
-
-                    LazyColumn {
-                        item {
-                            Text("Hisense Data", style = MaterialTheme.typography.headlineSmall)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = hisenseJson,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(8.dp),
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                        item {
-                            Text("Datadik Data", style = MaterialTheme.typography.headlineSmall)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = datadikJson,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(8.dp),
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-                    }
+                    com.example.owoo.ui.feature.HisenseDetailScreen(homeState = uiState, viewModel = homeViewModel)
                 }
 
                 if (uiState.pendingRows.isNotEmpty() && uiState.rowDetails == null && !uiState.isLoading) {
@@ -179,7 +151,7 @@ fun AppDrawer(
             }
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = onFetchDetailClicked, enabled = isFetchDetailEnabled) {
-                Text("Tarik Detail")
+                Text("Mulai Verval")
             }
             Spacer(modifier = Modifier.weight(1f))
             Button(onClick = onLogoutClicked) {

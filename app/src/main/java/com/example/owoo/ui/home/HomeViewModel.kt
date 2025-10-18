@@ -4,19 +4,17 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.owoo.data.datadik.DatadikData
+import com.example.owoo.data.hisense.HisenseData
+import com.example.owoo.network.DatadikService
 import com.example.owoo.network.GoogleSheetsService
+import com.example.owoo.network.HisenseService
+import com.example.owoo.util.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.example.owoo.data.datadik.DatadikData
-import com.example.owoo.data.hisense.HisenseData
-import com.example.owoo.network.DatadikService
-import com.example.owoo.network.HisenseService
-import com.example.owoo.util.CacheManager
-import com.example.owoo.util.CachedData
-import com.example.owoo.util.SessionManager
 
 data class RowDetails(
     val hisenseData: HisenseData,
@@ -29,7 +27,9 @@ data class HomeState(
     val pendingRows: List<List<String>> = emptyList(),
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val rowDetails: RowDetails? = null
+    val rowDetails: RowDetails? = null,
+    val evaluationForm: Map<String, String> = EvaluationConstants.defaultEvaluationValues,
+    val rejectionMessages: List<String> = emptyList()
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -47,6 +47,27 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             _uiState.value = _uiState.value.copy(serviceAccountJson = savedJson)
         }
+    }
+
+    fun updateEvaluation(col: String, value: String) {
+        val newForm = _uiState.value.evaluationForm.toMutableMap()
+        newForm[col] = value
+
+        // After updating, regenerate all rejection messages
+        val newRejectionMessages = mutableListOf<String>()
+        newForm.forEach { (key, selectedValue) ->
+            val defaultValue = EvaluationConstants.defaultEvaluationValues[key]
+            if (selectedValue != defaultValue) {
+                // The selected value IS the specific reason, if it exists in the sub-map.
+                val message = RejectionHelper.getRejectionMessage(key, selectedValue)
+                message?.let { newRejectionMessages.add(it) }
+            }
+        }
+
+        _uiState.value = _uiState.value.copy(
+            evaluationForm = newForm,
+            rejectionMessages = newRejectionMessages
+        )
     }
 
     fun onFileSelected(uri: Uri) {
@@ -103,7 +124,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun fetchRowDetails(row: List<String>, phpsessid: String) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+            _uiState.value = _uiState.value.copy(
+                isLoading = true, 
+                errorMessage = null,
+                evaluationForm = EvaluationConstants.defaultEvaluationValues, // Reset form
+                rejectionMessages = emptyList() // Reset messages
+            )
             try {
                 val npsnIndex = _uiState.value.headerRow.indexOf("NPSN")
                 if (npsnIndex == -1) {
@@ -131,7 +157,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     rowDetails = RowDetails(hisenseData, datadikData),
                     isLoading = false
                 )
-            } catch (e: Exception) {
+            }
+            catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(errorMessage = e.message, isLoading = false)
             }
         }
