@@ -29,15 +29,14 @@ object HisenseService {
 
             // 2. Parse the first row to find the link to the details page and the color status
             val firstRow = doc1.select("#main-content > div > div > div > div.table-container > div > table > tbody tr").first()
-            val onClickAttribute = firstRow?.attr("onclick")
-            val urlMatch = onClickAttribute?.let { Regex("window.open('([^']*)')").find(it) }
+            val onClickAttribute = firstRow?.attr("onclick")?.toString() ?: ""
+            val urlMatch = Regex("window\\.open\\('([^']*)'").find(onClickAttribute)
             val nextPath = urlMatch?.groupValues?.getOrNull(1)
 
             val firstTdStyle = firstRow?.select("td")?.first()?.attr("style") ?: ""
             val isGreen = firstTdStyle.contains("color:green")
 
             if (nextPath == null) {
-                // If there's no link, return only the color status
                 return HisenseData(isGreen = isGreen)
             }
 
@@ -51,27 +50,24 @@ object HisenseService {
             val dkmDoc = Jsoup.parse(dkmHtml)
 
             // 4. Parse all the data from the details page
-            val schoolInfoMap = dkmDoc.select(".filter-section input[type=\"text\"]").associate { el -> // Corrected escaped quote
-                val label = el.previousElementSibling()?.text()?.trim()?.replace("Telp", "Telp PIC") ?: ""
-                label to el.`val`()
-            }
+            val inputs = dkmDoc.select(".filter-section input")
             val schoolInfo = HisenseSchoolInfo(
-                npsn = schoolInfoMap["NPSN"],
-                nama = schoolInfoMap["Nama"],
-                alamat = schoolInfoMap["Alamat"],
-                provinsi = schoolInfoMap["Provinsi"],
-                kabupaten = schoolInfoMap["Kabupaten"],
-                kecamatan = schoolInfoMap["Kecamatan"],
-                kelurahanDesa = schoolInfoMap["Kelurahan/Desa"],
-                jenjang = schoolInfoMap["Jenjang"],
-                bentuk = schoolInfoMap["Bentuk"],
-                sekolah = schoolInfoMap["Sekolah"],
-                formal = schoolInfoMap["Formal"],
-                pic = schoolInfoMap["PIC"],
-                telpPic = schoolInfoMap["Telp PIC"],
-                resiPengiriman = schoolInfoMap["Resi Pengiriman"],
-                serialNumber = schoolInfoMap["Serial Number"],
-                status = schoolInfoMap["Status"]
+                npsn = inputs.getOrNull(0)?.`val`(),
+                nama = inputs.getOrNull(1)?.`val`(),
+                alamat = inputs.getOrNull(2)?.`val`(),
+                provinsi = inputs.getOrNull(3)?.`val`(),
+                kabupaten = inputs.getOrNull(4)?.`val`(),
+                kecamatan = inputs.getOrNull(5)?.`val`(),
+                kelurahanDesa = inputs.getOrNull(6)?.`val`(),
+                jenjang = inputs.getOrNull(7)?.`val`(),
+                bentuk = inputs.getOrNull(8)?.`val`(),
+                sekolah = inputs.getOrNull(9)?.`val`(),
+                formal = inputs.getOrNull(10)?.`val`(),
+                pic = inputs.getOrNull(11)?.`val`(),
+                telpPic = inputs.getOrNull(12)?.`val`(),
+                resiPengiriman = inputs.getOrNull(13)?.`val`(),
+                serialNumber = inputs.getOrNull(14)?.`val`(),
+                status = inputs.getOrNull(15)?.`val`()
             )
 
             val images = dkmDoc.select("#flush-collapseTwo img").associate {
