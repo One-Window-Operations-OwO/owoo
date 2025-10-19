@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.owoo.ui.home.HomeState
+import com.example.owoo.data.datadik.DatadikData
+import com.example.owoo.data.datadik.Ptk
 import com.example.owoo.ui.home.HomeViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,9 +35,21 @@ fun HisenseDetailScreen(
     viewModel: HomeViewModel
 ) {
     val hisenseData = homeState.rowDetails?.hisenseData ?: return // Safety check
+    val datadikData = homeState.rowDetails?.datadikData
     val images = remember { hisenseData.images?.filterValues { !it.isNullOrBlank() }?.toList() ?: emptyList() }
     var currentPage by remember { mutableStateOf(0) }
     val scaffoldState = rememberBottomSheetScaffoldState()
+
+    var ptkQuery by remember { mutableStateOf("") }
+    val ptkList = remember(datadikData) { datadikData?.ptk ?: emptyList() }
+    val filteredPtk = remember(ptkQuery, ptkList) {
+        if (ptkQuery.length < 1) {
+            emptyList()
+        } else {
+            ptkList.filter { it.nama?.contains(ptkQuery, ignoreCase = true) == true }
+        }
+    }
+    var selectedPtk by remember { mutableStateOf<Ptk?>(null) }
 
     BottomSheetScaffold(
         scaffoldState = scaffoldState,
@@ -77,22 +91,50 @@ fun HisenseDetailScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     val currentImageTitle = images.getOrNull(currentPage)?.first ?: "Detail"
-                    Text(
-                        text = currentImageTitle,
-                        style = MaterialTheme.typography.titleLarge,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
 
-                    val dynamicInfo = getDynamicInfo(currentImageTitle, hisenseData)
+                    val dynamicInfo = getDynamicInfo(currentImageTitle, hisenseData, datadikData)
+                    val isBappScreen = currentImageTitle == "Foto BAPP Hal 1" || currentImageTitle == "Foto BAPP Hal 2"
+
                     if (dynamicInfo.isNotEmpty()) {
                         dynamicInfo.forEach { (label, value) ->
-                            Text("$label: $value", style = MaterialTheme.typography.bodyMedium)
+                            Text("$label: $value", style = MaterialTheme.typography.bodySmall)
                         }
                     } else {
                         Text("NPSN: ${hisenseData.schoolInfo?.npsn ?: "N/A"}", style = MaterialTheme.typography.bodyMedium)
                         Text("Nama: ${hisenseData.schoolInfo?.nama ?: "N/A"}", style = MaterialTheme.typography.bodyMedium)
+                    }
+
+                    if (isBappScreen) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedTextField(
+                            value = ptkQuery,
+                            onValueChange = { ptkQuery = it; selectedPtk = null },
+                            label = { Text("Cari Nama PTK (min. 1 huruf)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+
+                        if (ptkQuery.length >= 1 && filteredPtk.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            filteredPtk.take(5).forEach { ptk ->
+                                Column(modifier = Modifier
+                                    .clickable {
+                                        selectedPtk = ptk
+                                        ptkQuery = ptk.nama ?: ""
+                                    }
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp, horizontal = 4.dp)) {
+                                    Text(ptk.nama ?: "", style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        }
+
+                        selectedPtk?.let { ptk ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Nama PTK: ${ptk.nama ?: "N/A"}", style = MaterialTheme.typography.bodyMedium)
+                            Text("Jabatan: ${ptk.jabatanPtk ?: "N/A"}", style = MaterialTheme.typography.bodyMedium)
+                            Text("NIP: ${ptk.nip ?: "N/A"}", style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
                 }
             }
@@ -135,12 +177,22 @@ fun HisenseDetailScreen(
 }
 
 @Composable
-private fun getDynamicInfo(currentImageTitle: String, hisenseData: com.example.owoo.data.hisense.HisenseData): List<Pair<String, String>> {
+private fun getDynamicInfo(
+    currentImageTitle: String,
+    hisenseData: com.example.owoo.data.hisense.HisenseData,
+    datadikData: DatadikData?
+): List<Pair<String, String>> {
     val info = mutableListOf<Pair<String, String>>()
     val schoolInfo = hisenseData.schoolInfo ?: return emptyList()
 
-    fun getFullAddress(schoolInfo: com.example.owoo.data.hisense.HisenseSchoolInfo): String {
+    fun getHisenseFullAddress(schoolInfo: com.example.owoo.data.hisense.HisenseSchoolInfo): String {
         val parts = listOfNotNull(schoolInfo.alamat, schoolInfo.kecamatan, schoolInfo.kabupaten)
+        return if (parts.isNotEmpty()) parts.joinToString(", ") else "N/A"
+    }
+
+    fun getDatadikFullAddress(datadikData: DatadikData?): String {
+        if (datadikData == null) return "N/A"
+        val parts = listOfNotNull(datadikData.address, datadikData.kecamatan, datadikData.kabupaten)
         return if (parts.isNotEmpty()) parts.joinToString(", ") else "N/A"
     }
 
@@ -148,20 +200,23 @@ private fun getDynamicInfo(currentImageTitle: String, hisenseData: com.example.o
         "Foto Plang Sekolah" -> {
             info.add("NPSN" to (schoolInfo.npsn ?: "N/A"))
             info.add("Nama" to (schoolInfo.nama ?: "N/A"))
-            info.add("Alamat" to getFullAddress(schoolInfo))
+            info.add("Alamat" to getHisenseFullAddress(schoolInfo))
+            info.add("Alamat Datadik" to getDatadikFullAddress(datadikData))
         }
         "Foto Box & PIC", "Foto Kelengkapan Unit", "Foto Proses Instalasi", "Foto Training" -> {
-            info.add("Alamat" to getFullAddress(schoolInfo))
+            info.add("Alamat" to getHisenseFullAddress(schoolInfo))
+            info.add("Alamat Datadik" to getDatadikFullAddress(datadikData))
         }
         "Foto Serial Number" -> {
             info.add("Serial Number" to (schoolInfo.serialNumber ?: "N/A"))
-            info.add("Alamat" to getFullAddress(schoolInfo))
+            info.add("Alamat" to getHisenseFullAddress(schoolInfo))
+            info.add("Alamat Datadik" to getDatadikFullAddress(datadikData))
         }
         "Foto BAPP Hal 1" -> {
+            info.add("Serial Number" to (schoolInfo.serialNumber ?: "N/A"))
             info.add("NPSN" to (schoolInfo.npsn ?: "N/A"))
             info.add("Nama" to (schoolInfo.nama ?: "N/A"))
             info.add("PIC" to (schoolInfo.pic ?: "N/A"))
-            info.add("Serial Number" to (schoolInfo.serialNumber ?: "N/A"))
         }
         "Foto BAPP Hal 2" -> {
             info.add("NPSN" to (schoolInfo.npsn ?: "N/A"))
