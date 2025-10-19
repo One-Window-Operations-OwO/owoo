@@ -19,3 +19,14 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Keep all data model classes in the data package
+-keep class com.example.owoo.data.** { *; }
+-keep class com.google.gson.annotations.** { *; }
+
+# Keep all network service classes
+-keep class com.example.owoo.network.** { *; }
+
+# Keep attributes for GSON
+-keepattributes Signature
+-keepattributes *Annotation*
