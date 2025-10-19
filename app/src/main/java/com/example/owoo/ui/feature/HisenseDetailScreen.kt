@@ -39,7 +39,7 @@ fun HisenseDetailScreen(
 
     BottomSheetScaffold(
         scaffoldState = scaffoldState,
-        sheetPeekHeight = 56.dp, // Height for the "peek" state
+        sheetPeekHeight = 56.dp,
         sheetContent = {
             EvaluationSheetContent(
                 currentPage = currentPage,
@@ -84,8 +84,16 @@ fun HisenseDetailScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("NPSN: ${hisenseData.schoolInfo?.npsn ?: "N/A"}", style = MaterialTheme.typography.bodyMedium)
-                    Text("Nama: ${hisenseData.schoolInfo?.nama ?: "N/A"}", style = MaterialTheme.typography.bodyMedium)
+
+                    val dynamicInfo = getDynamicInfo(currentImageTitle, hisenseData)
+                    if (dynamicInfo.isNotEmpty()) {
+                        dynamicInfo.forEach { (label, value) ->
+                            Text("$label: $value", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    } else {
+                        Text("NPSN: ${hisenseData.schoolInfo?.npsn ?: "N/A"}", style = MaterialTheme.typography.bodyMedium)
+                        Text("Nama: ${hisenseData.schoolInfo?.nama ?: "N/A"}", style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
 
@@ -124,6 +132,44 @@ fun HisenseDetailScreen(
             }
         }
     }
+}
+
+@Composable
+private fun getDynamicInfo(currentImageTitle: String, hisenseData: com.example.owoo.data.hisense.HisenseData): List<Pair<String, String>> {
+    val info = mutableListOf<Pair<String, String>>()
+    val schoolInfo = hisenseData.schoolInfo ?: return emptyList()
+
+    fun getFullAddress(schoolInfo: com.example.owoo.data.hisense.HisenseSchoolInfo): String {
+        val parts = listOfNotNull(schoolInfo.alamat, schoolInfo.kecamatan, schoolInfo.kabupaten)
+        return if (parts.isNotEmpty()) parts.joinToString(", ") else "N/A"
+    }
+
+    when (currentImageTitle) {
+        "Foto Plang Sekolah" -> {
+            info.add("NPSN" to (schoolInfo.npsn ?: "N/A"))
+            info.add("Nama" to (schoolInfo.nama ?: "N/A"))
+            info.add("Alamat" to getFullAddress(schoolInfo))
+        }
+        "Foto Box & PIC", "Foto Kelengkapan Unit", "Foto Proses Instalasi", "Foto Training" -> {
+            info.add("Alamat" to getFullAddress(schoolInfo))
+        }
+        "Foto Serial Number" -> {
+            info.add("Serial Number" to (schoolInfo.serialNumber ?: "N/A"))
+            info.add("Alamat" to getFullAddress(schoolInfo))
+        }
+        "Foto BAPP Hal 1" -> {
+            info.add("NPSN" to (schoolInfo.npsn ?: "N/A"))
+            info.add("Nama" to (schoolInfo.nama ?: "N/A"))
+            info.add("PIC" to (schoolInfo.pic ?: "N/A"))
+            info.add("Serial Number" to (schoolInfo.serialNumber ?: "N/A"))
+        }
+        "Foto BAPP Hal 2" -> {
+            info.add("NPSN" to (schoolInfo.npsn ?: "N/A"))
+            info.add("Nama" to (schoolInfo.nama ?: "N/A"))
+            info.add("PIC" to (schoolInfo.pic ?: "N/A"))
+        }
+    }
+    return info
 }
 
 @Composable

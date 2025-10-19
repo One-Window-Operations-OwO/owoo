@@ -20,9 +20,12 @@ import com.example.owoo.ui.auth.LoginScreen
 import com.example.owoo.ui.home.HomeScreen
 import com.example.owoo.ui.theme.OwooTheme
 
+import androidx.core.view.WindowCompat
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
             OwooTheme {
                 OwooApp()

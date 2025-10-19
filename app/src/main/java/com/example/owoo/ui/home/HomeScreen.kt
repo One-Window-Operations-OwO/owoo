@@ -61,16 +61,14 @@ fun HomeScreen(
                 onLogoutClicked = onLogoutClicked,
                 onPickFileClicked = { filePickerLauncher.launch("application/json") },
                 onFetchDataClicked = { homeViewModel.fetchPendingRows(userName) },
-                isFetchDataEnabled = uiState.serviceAccountJson != null && !uiState.isLoading,
-                onFetchDetailClicked = { homeViewModel.fetchFirstRowDetails() },
-                isFetchDetailEnabled = uiState.pendingRows.isNotEmpty() && !uiState.isLoading
+                isFetchDataEnabled = uiState.serviceAccountJson != null && !uiState.isLoading
             )
         }
     ) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Home (${uiState.pendingRows.size} pending)") },
+                    title = { Text("${uiState.pendingRows.size} Data lagi") },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
@@ -97,21 +95,28 @@ fun HomeScreen(
 
                 if (uiState.pendingRows.isNotEmpty() && uiState.rowDetails == null && !uiState.isLoading) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    val firstRow = uiState.pendingRows.first()
-                    val header = uiState.headerRow
-                    val jsonMap = header.zip(firstRow).toMap()
-                    val jsonPretty = try {
-                        org.json.JSONObject(jsonMap).toString(4)
-                    } catch (e: Exception) {
-                        jsonMap.toString()
+                    Button(
+                        onClick = { homeViewModel.fetchFirstRowDetails() },
+                        enabled = uiState.pendingRows.isNotEmpty() && !uiState.isLoading
+                    ) {
+                        Text("Mulai Verval")
                     }
-
-                    Text(
-                        text = "Pending Row:\n$jsonPretty",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(8.dp),
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+//                    Spacer(modifier = Modifier.height(16.dp))
+//                    val firstRow = uiState.pendingRows.first()
+//                    val header = uiState.headerRow
+//                    val jsonMap = header.zip(firstRow).toMap()
+//                    val jsonPretty = try {
+//                        org.json.JSONObject(jsonMap).toString(4)
+//                    } catch (e: Exception) {
+//                        jsonMap.toString()
+//                    }
+//
+//                    Text(
+//                        text = "Pending Row:\n$jsonPretty",
+//                        style = MaterialTheme.typography.bodyMedium,
+//                        modifier = Modifier.padding(8.dp),
+//                        color = MaterialTheme.colorScheme.onBackground
+//                    )
                 }
 
                 uiState.errorMessage?.let {
@@ -129,9 +134,7 @@ fun AppDrawer(
     onLogoutClicked: () -> Unit,
     onPickFileClicked: () -> Unit,
     onFetchDataClicked: () -> Unit,
-    isFetchDataEnabled: Boolean,
-    onFetchDetailClicked: () -> Unit,
-    isFetchDetailEnabled: Boolean
+    isFetchDataEnabled: Boolean
 ) {
     ModalDrawerSheet {
         Column(
@@ -148,10 +151,6 @@ fun AppDrawer(
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = onFetchDataClicked, enabled = isFetchDataEnabled) {
                 Text("Tarik Data")
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = onFetchDetailClicked, enabled = isFetchDetailEnabled) {
-                Text("Mulai Verval")
             }
             Spacer(modifier = Modifier.weight(1f))
             Button(onClick = onLogoutClicked) {
