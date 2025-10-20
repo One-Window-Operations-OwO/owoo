@@ -10,6 +10,7 @@ import com.example.owoo.network.DatadikService
 import com.example.owoo.network.GoogleSheetsService
 import com.example.owoo.network.HisenseAuthService
 import com.example.owoo.network.HisenseService
+import com.example.owoo.network.RowWithIndex
 import com.example.owoo.util.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +26,7 @@ data class RowDetails(
 data class HomeState(
     val serviceAccountJson: String? = null,
     val headerRow: List<String> = emptyList(),
-    val pendingRows: List<List<String>> = emptyList(),
+    val pendingRows: List<RowWithIndex> = emptyList(),
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val rowDetails: RowDetails? = null,
@@ -59,12 +60,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val newForm = _uiState.value.evaluationForm.toMutableMap()
         newForm[col] = value
 
-        // After updating, regenerate all rejection messages
         val newRejectionMessages = mutableListOf<String>()
         newForm.forEach { (key, selectedValue) ->
             val defaultValue = EvaluationConstants.defaultEvaluationValues[key]
             if (selectedValue != defaultValue) {
-                // The selected value IS the specific reason, if it exists in the sub-map.
                 val message = RejectionHelper.getRejectionMessage(key, selectedValue)
                 message?.let { newRejectionMessages.add(it) }
             }
@@ -84,6 +83,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 val jsonContent = getApplication<Application>().contentResolver.openInputStream(uri)?.bufferedReader().use { it?.readText() }
                 if (jsonContent != null) {
                     sessionManager.saveServiceAccountJson(jsonContent)
+                    GoogleSheetsService.initialize(jsonContent)
                     _uiState.value = _uiState.value.copy(serviceAccountJson = jsonContent, errorMessage = null)
                 }
             } catch (e: Exception) {
@@ -93,13 +93,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun fetchPendingRows(verifierName: String) {
-        val json = _uiState.value.serviceAccountJson ?: return
-
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null, pendingRows = emptyList())
             try {
                 val (header, rows) = withContext(Dispatchers.IO) {
-                    GoogleSheetsService.getPendingRows(json, verifierName)
+                    GoogleSheetsService.getPendingRows(verifierName)
                 }
                 _uiState.value = _uiState.value.copy(headerRow = header, pendingRows = rows, isLoading = false)
                 cacheManager.savePendingRows(CachedData(header, rows))
@@ -121,22 +119,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-        fun fetchRowDetails(row: List<String>, phpsessid: String) {
-            viewModelScope.launch {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = true,
-                    rowDetails = null, // Clear previous details to show loading
-                    errorMessage = null,
-                    evaluationForm = EvaluationConstants.defaultEvaluationValues, // Reset form
-                    rejectionMessages = emptyList(), // Reset messages
-                    rejectionReasonString = "" // Reset reason string
-                )
-                try {
+    fun fetchRowDetails(rowWithIndex: RowWithIndex, phpsessid: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                rowDetails = null, 
+                errorMessage = null,
+                evaluationForm = EvaluationConstants.defaultEvaluationValues, 
+                rejectionMessages = emptyList(), 
+                rejectionReasonString = "" 
+            )
+            try {
                 val npsnIndex = _uiState.value.headerRow.indexOf("NPSN")
                 if (npsnIndex == -1) {
                     throw IllegalStateException("Kolom NPSN tidak ditemukan.")
                 }
-                val npsn = row[npsnIndex]
+                val npsn = rowWithIndex.rowData[npsnIndex]
 
                 val hisenseData = withContext(Dispatchers.IO) {
                     HisenseService.getHisense(npsn, phpsessid)
@@ -146,8 +144,33 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     throw Exception("Hisense error: ${hisenseData.error}")
                 }
 
+                if (!hisenseData.isGreen) {
+                    withContext(Dispatchers.IO) {
+                        GoogleSheetsService.updateSheet(
+                            sheetId = "1rtLbHvl6qpQiRat4h79vvLlUAqq15dc1b7p81zaQoqM",
+                            rowIndex = rowWithIndex.rowIndex,
+                            action = "formatSkipHitam",
+                            updates = null,
+                            customReason = null
+                        )
+                    }
+
+                    val currentRows = _uiState.value.pendingRows
+                    val newRows = currentRows.drop(1)
+
+                    _uiState.value = _uiState.value.copy(pendingRows = newRows)
+                    cacheManager.savePendingRows(CachedData(_uiState.value.headerRow, newRows))
+
+                    if (newRows.isNotEmpty()) {
+                        fetchRowDetails(newRows.first(), phpsessid)
+                    } else {
+                        _uiState.value = _uiState.value.copy(isLoading = false, rowDetails = null, errorMessage = "Semua data telah diproses.")
+                    }
+                    return@launch
+                }
+
                 val datadikData = withContext(Dispatchers.IO) {
-                        DatadikService.getDatadik(npsn)
+                    DatadikService.getDatadik(npsn)
                 }
 
                 if (datadikData.error != null) {
@@ -165,15 +188,29 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun generateRejectionMessage(evaluationForm: Map<String, String>): String {
+        val messages = mutableListOf<String>()
+        evaluationForm.forEach { (key, selectedValue) ->
+            val defaultValue = EvaluationConstants.defaultEvaluationValues[key]
+            if (selectedValue != defaultValue) {
+                val message = RejectionHelper.getRejectionMessage(key, selectedValue)
+                message?.let { messages.add(it) }
+            }
+        }
+        return messages.joinToString(separator = ", ")
+    }
+
     fun updateSheetAndProceed(action: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
             try {
                 val state = _uiState.value
-                val dkmData = state.rowDetails?.hisenseData ?: throw IllegalStateException("Tidak ada data untuk diupdate.")
+                if (state.pendingRows.isEmpty()) throw IllegalStateException("Tidak ada data untuk diupdate.")
+
+                val currentRow = state.pendingRows.first()
+                val dkmData = state.rowDetails?.hisenseData ?: throw IllegalStateException("Tidak ada data DKM untuk diupdate.")
                 val cookie = sessionManager.getCookie() ?: throw IllegalStateException("Cookie Hisense tidak ditemukan.")
 
-                // Validate cookie
                 val validationResult = withContext(Dispatchers.IO) {
                     HisenseAuthService.validateHisenseCookie(cookie)
                 }
@@ -222,11 +259,25 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     throw Exception("Gagal update Hisense: ${hisenseRes.body}")
                 }
 
-                // User story: ignore Google Sheets update for now.
+                val generatedReason = generateRejectionMessage(state.evaluationForm)
+                val customReason = state.rejectionReasonString
+                val finalCustomReason = if (customReason.isNotEmpty() && customReason != generatedReason) {
+                    customReason
+                } else {
+                    null
+                }
 
-                val currentRows = state.pendingRows
-                // This assumes we are always processing the first row of the list
-                val newRows = currentRows.drop(1)
+                withContext(Dispatchers.IO) {
+                    GoogleSheetsService.updateSheet(
+                        sheetId = "1rtLbHvl6qpQiRat4h79vvLlUAqq15dc1b7p81zaQoqM",
+                        rowIndex = currentRow.rowIndex,
+                        action = "update",
+                        updates = state.evaluationForm,
+                        customReason = finalCustomReason
+                    )
+                }
+
+                val newRows = state.pendingRows.drop(1)
 
                 _uiState.value = _uiState.value.copy(pendingRows = newRows)
                 cacheManager.savePendingRows(CachedData(state.headerRow, newRows))

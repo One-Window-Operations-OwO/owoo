@@ -1,13 +1,14 @@
 package com.example.owoo.util
 
 import android.content.Context
+import com.example.owoo.network.RowWithIndex
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.io.File
 
 data class CachedData(
     val header: List<String>,
-    val rows: List<List<String>>
+    val rows: List<RowWithIndex>
 )
 
 class CacheManager(context: Context) {
