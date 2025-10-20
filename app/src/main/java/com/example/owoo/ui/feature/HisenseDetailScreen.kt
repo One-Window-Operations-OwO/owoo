@@ -29,6 +29,8 @@ import com.example.owoo.ui.home.HomeState
 import com.example.owoo.data.datadik.DatadikData
 import com.example.owoo.data.datadik.Ptk
 import com.example.owoo.ui.home.HomeViewModel
+import kotlinx.coroutines.launch
+import androidx.activity.compose.BackHandler
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,6 +43,15 @@ fun HisenseDetailScreen(
     val images = remember { hisenseData.images?.filterValues { !it.isNullOrBlank() }?.toList() ?: emptyList() }
     var currentPage by remember { mutableStateOf(0) }
     val scaffoldState = rememberBottomSheetScaffoldState()
+    val scope = rememberCoroutineScope()
+
+    if (scaffoldState.bottomSheetState.isVisible) {
+        BackHandler(onBack = {
+            scope.launch {
+                scaffoldState.bottomSheetState.partialExpand()
+            }
+        })
+    }
 
     var ptkQuery by remember { mutableStateOf("") }
     val ptkList = remember(datadikData) { datadikData?.ptk ?: emptyList() }
@@ -61,7 +72,9 @@ fun HisenseDetailScreen(
                 currentPage = currentPage,
                 evaluationForm = homeState.evaluationForm,
                 onFormChange = { col, value -> viewModel.updateEvaluation(col, value) },
-                rejectionMessages = homeState.rejectionMessages
+                rejectionMessages = homeState.rejectionMessages,
+                rejectionReasonString = homeState.rejectionReasonString,
+                onReasonChange = { viewModel.updateRejectionReason(it) }
             )
             // Add extra space for the sheet to go behind navigation bars
             Spacer(modifier = Modifier.navigationBarsPadding())

@@ -10,9 +10,6 @@ import java.net.URL
 object DatadikService {
 
     private const val datadikUrl = "https://datadik.kemendikdasmen.go.id/"
-    // IMPORTANT: This cookie is hardcoded and might expire.
-    // In the TypeScript code, this was loaded from environment variables.
-    // Consider a more robust way to manage this authentication token.
     private const val djanCook = "eyJzZXNzaWQiOiIxNzNGMzk5Ni1FRDM3LTRENDktODQ4Ny01MzREMENFNTM0MjEiLCJwaWQiOiJBQkQ0MDJENS0xQTI4LTQ2OTUtOEI1OS01RDM5MzFCQUNDRjciLCJ1c2VyIjoiYm9zZGFrZmlzaWtzbWFAZ21haWwuY29tIiwidHlwZSI6IjUiLCJuYW1hIjoiTnVydWwgTWFoZnVkaSAoRGl0LiBTTUEpIiwibGVtYmFnYSI6bnVsbCwid2lsYXlhaCI6IjAwMDAwMCIsInNla29sYWgiOm51bGwsImV4cCI6MH0%3D"
 
     fun getDatadik(q: String): DatadikData {

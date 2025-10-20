@@ -4,9 +4,15 @@ import com.example.owoo.data.hisense.HisenseData
 import com.example.owoo.data.hisense.HisenseProcessHistory
 import com.example.owoo.data.hisense.HisenseSchoolInfo
 import org.jsoup.Jsoup
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLDecoder
+
+data class HisenseResponse(val body: String, val status: Int, val contentType: String) {
+    val isSuccessful: Boolean
+        get() = status in 200..299
+}
 
 object HisenseService {
 
@@ -115,5 +121,20 @@ object HisenseService {
         } catch (e: Exception) {
             return HisenseData(isGreen = false, error = e.message)
         }
+    }
+
+    @Throws(IOException::class)
+    fun makeHisenseRequest(path: String, cookie: String): HisenseResponse {
+        val url = "$hisenseUrl$path"
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.requestMethod = "GET"
+        conn.setRequestProperty("Cookie", "PHPSESSID=$cookie")
+
+        val status = conn.responseCode
+        val body = (if (status in 200..299) conn.inputStream else conn.errorStream)
+            .bufferedReader().readText()
+        val contentType = conn.contentType ?: "text/html"
+
+        return HisenseResponse(body, status, contentType)
     }
 }

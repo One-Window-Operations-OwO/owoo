@@ -17,7 +17,9 @@ fun EvaluationSheetContent(
     currentPage: Int,
     evaluationForm: Map<String, String>,
     onFormChange: (String, String) -> Unit,
-    rejectionMessages: List<String>
+    rejectionMessages: List<String>,
+    rejectionReasonString: String,
+    onReasonChange: (String) -> Unit
 ) {
     // Filter fields based on the current image page, similar to the React code
     val filteredFields = remember(currentPage) {
@@ -70,16 +72,14 @@ fun EvaluationSheetContent(
         if (rejectionMessages.isNotEmpty()) {
             item {
                 Column(modifier = Modifier.padding(top = 16.dp)) {
-                    Text("Alasan Penolakan:", style = MaterialTheme.typography.titleMedium)
+                    Text("Alasan Penolakan (bisa diedit):", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(8.dp))
-                    rejectionMessages.forEach { message ->
-                        Text(
-                            text = "• $message",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
-                    }
+                    OutlinedTextField(
+                        value = rejectionReasonString,
+                        onValueChange = onReasonChange,
+                        modifier = Modifier.fillMaxWidth().height(150.dp),
+                        label = { Text("Alasan Penolakan") }
+                    )
                 }
             }
         }

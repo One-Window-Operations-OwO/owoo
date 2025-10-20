@@ -8,6 +8,7 @@ import com.example.owoo.data.datadik.DatadikData
 import com.example.owoo.data.hisense.HisenseData
 import com.example.owoo.network.DatadikService
 import com.example.owoo.network.GoogleSheetsService
+import com.example.owoo.network.HisenseAuthService
 import com.example.owoo.network.HisenseService
 import com.example.owoo.util.*
 import kotlinx.coroutines.Dispatchers
@@ -29,7 +30,8 @@ data class HomeState(
     val errorMessage: String? = null,
     val rowDetails: RowDetails? = null,
     val evaluationForm: Map<String, String> = EvaluationConstants.defaultEvaluationValues,
-    val rejectionMessages: List<String> = emptyList()
+    val rejectionMessages: List<String> = emptyList(),
+    val rejectionReasonString: String = ""
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -49,6 +51,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateRejectionReason(newReason: String) {
+        _uiState.value = _uiState.value.copy(rejectionReasonString = newReason)
+    }
+
     fun updateEvaluation(col: String, value: String) {
         val newForm = _uiState.value.evaluationForm.toMutableMap()
         newForm[col] = value
@@ -63,10 +69,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 message?.let { newRejectionMessages.add(it) }
             }
         }
+        val newReasonString = newRejectionMessages.joinToString(separator = "; ")
 
         _uiState.value = _uiState.value.copy(
             evaluationForm = newForm,
-            rejectionMessages = newRejectionMessages
+            rejectionMessages = newRejectionMessages,
+            rejectionReasonString = newReasonString
         )
     }
 
@@ -95,15 +103,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _uiState.value = _uiState.value.copy(headerRow = header, pendingRows = rows, isLoading = false)
                 cacheManager.savePendingRows(CachedData(header, rows))
-
-                if (rows.isNotEmpty()) {
-                    val phpsessid = sessionManager.getCookie()
-                    if (phpsessid != null) {
-                        fetchRowDetails(rows.first(), phpsessid)
-                    } else {
-                        _uiState.value = _uiState.value.copy(errorMessage = "Session expired. Please login again.")
-                    }
-                }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(errorMessage = e.message, isLoading = false)
                 cacheManager.clearCache()
@@ -122,15 +121,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun fetchRowDetails(row: List<String>, phpsessid: String) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isLoading = true, 
-                errorMessage = null,
-                evaluationForm = EvaluationConstants.defaultEvaluationValues, // Reset form
-                rejectionMessages = emptyList() // Reset messages
-            )
-            try {
+        fun fetchRowDetails(row: List<String>, phpsessid: String) {
+            viewModelScope.launch {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = true,
+                    rowDetails = null, // Clear previous details to show loading
+                    errorMessage = null,
+                    evaluationForm = EvaluationConstants.defaultEvaluationValues, // Reset form
+                    rejectionMessages = emptyList(), // Reset messages
+                    rejectionReasonString = "" // Reset reason string
+                )
+                try {
                 val npsnIndex = _uiState.value.headerRow.indexOf("NPSN")
                 if (npsnIndex == -1) {
                     throw IllegalStateException("Kolom NPSN tidak ditemukan.")
@@ -161,6 +162,97 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(errorMessage = e.message, isLoading = false)
             }
+        }
+    }
+
+    fun updateSheetAndProceed(action: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+            try {
+                val state = _uiState.value
+                val dkmData = state.rowDetails?.hisenseData ?: throw IllegalStateException("Tidak ada data untuk diupdate.")
+                val cookie = sessionManager.getCookie() ?: throw IllegalStateException("Cookie Hisense tidak ditemukan.")
+
+                // Validate cookie
+                val validationResult = withContext(Dispatchers.IO) {
+                    HisenseAuthService.validateHisenseCookie(cookie)
+                }
+                if (validationResult.isFailure) {
+                    throw IllegalStateException("Cookie Hisense kadaluarsa atau tidak valid.")
+                }
+
+                val params = mutableMapOf<String, String>()
+                params["q"] = dkmData.q ?: ""
+                params["s"] = ""
+                params["v"] = ""
+                params["npsn"] = dkmData.npsn ?: ""
+                params["iprop"] = dkmData.iprop ?: ""
+                params["ikab"] = dkmData.ikab ?: ""
+                params["ikec"] = dkmData.ikec ?: ""
+                params["iins"] = dkmData.iins ?: ""
+                params["ijenjang"] = dkmData.ijenjang ?: ""
+                params["ibp"] = dkmData.ibp ?: ""
+                params["iss"] = dkmData.iss ?: ""
+                params["isf"] = dkmData.isf ?: ""
+                params["istt"] = dkmData.istt ?: ""
+                params["itgl"] = dkmData.itgl ?: ""
+                params["itgla"] = dkmData.itgla ?: ""
+                params["itgle"] = dkmData.itgle ?: ""
+                params["ipet"] = dkmData.ipet ?: ""
+                params["ihnd"] = dkmData.ihnd ?: ""
+
+                when (action) {
+                    "terima" -> {
+                        params["s"] = "A"
+                    }
+                    "tolak" -> {
+                        params["s"] = "R"
+                        params["v"] = state.rejectionReasonString
+                    }
+                }
+
+                val hisenseQueryString = params.map { (k, v) -> "${Uri.encode(k)}=${Uri.encode(v)}" }.joinToString("&")
+                val hisensePath = "r_dkm_apr_p.php?$hisenseQueryString"
+
+                val hisenseRes = withContext(Dispatchers.IO) {
+                    HisenseService.makeHisenseRequest(hisensePath, cookie)
+                }
+
+                if (!hisenseRes.isSuccessful) {
+                    throw Exception("Gagal update Hisense: ${hisenseRes.body}")
+                }
+
+                // User story: ignore Google Sheets update for now.
+
+                val currentRows = state.pendingRows
+                // This assumes we are always processing the first row of the list
+                val newRows = currentRows.drop(1)
+
+                _uiState.value = _uiState.value.copy(pendingRows = newRows)
+                cacheManager.savePendingRows(CachedData(state.headerRow, newRows))
+
+                if (newRows.isNotEmpty()) {
+                    fetchRowDetails(newRows.first(), cookie)
+                } else {
+                    _uiState.value = _uiState.value.copy(isLoading = false, rowDetails = null, errorMessage = "Semua data telah diproses.")
+                }
+
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(errorMessage = e.message, isLoading = false)
+            }
+        }
+    }
+
+    fun stopVerval() {
+        viewModelScope.launch {
+            cacheManager.clearCache()
+            _uiState.value = _uiState.value.copy(
+                rowDetails = null,
+                pendingRows = emptyList(),
+                headerRow = emptyList(),
+                errorMessage = null,
+                isLoading = false
+            )
         }
     }
 }
