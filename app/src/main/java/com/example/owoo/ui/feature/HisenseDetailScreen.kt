@@ -22,6 +22,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.example.owoo.ui.home.HomeState
 import com.example.owoo.data.datadik.DatadikData
@@ -235,10 +237,13 @@ fun ImageViewerWithControls(
     onNext: () -> Unit,
     showNavigation: Boolean
 ) {
+    var isFullscreen by remember { mutableStateOf(false) }
+
     Box(modifier = modifier) {
         ZoomableAsyncImage(
             imageUrl = imageUrl,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            onFullscreenClick = { isFullscreen = true }
         )
 
         if (showNavigation) {
@@ -287,13 +292,26 @@ fun ImageViewerWithControls(
             }
         }
     }
+
+    if (isFullscreen) {
+        Dialog(onDismissRequest = { isFullscreen = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                ZoomableAsyncImage(
+                    imageUrl = imageUrl,
+                    modifier = Modifier.fillMaxSize(),
+                    onFullscreenClick = { isFullscreen = false } // To close fullscreen
+                )
+            }
+        }
+    }
 }
 
 
 @Composable
 fun ZoomableAsyncImage(
     imageUrl: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onFullscreenClick: () -> Unit
 ) {
     var scale by remember { mutableStateOf(1f) }
     var offsetX by remember { mutableStateOf(0f) }
@@ -309,63 +327,68 @@ fun ZoomableAsyncImage(
         rotation = 0f
     }
 
-    Box(
-        modifier = modifier
-            .clip(RectangleShape)
-            .background(Color.Black)
-            .onSizeChanged { composableSize = it }
-            .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val oldScale = scale
-                    scale *= zoom
-                    scale = scale.coerceIn(1f, 5f)
+    fun resetTransform() {
+        scale = 1f
+        offsetX = 0f
+        offsetY = 0f
+        rotation = 0f
+    }
 
-                    if (scale > 1f) {
-                        val maxOffsetX = (composableSize.width * (scale - 1)) / 2f
-                        val maxOffsetY = (composableSize.height * (scale - 1)) / 2f
-                        
-                        offsetX = (offsetX + pan.x * oldScale).coerceIn(-maxOffsetX, maxOffsetX)
-                        offsetY = (offsetY + pan.y * oldScale).coerceIn(-maxOffsetY, maxOffsetY)
-                    } else {
-                        scale = 1f
-                        offsetX = 0f
-                        offsetY = 0f
-                    }
+    val imageModifier = Modifier
+        .fillMaxSize()
+        .graphicsLayer(
+            scaleX = scale,
+            scaleY = scale,
+            translationX = offsetX,
+            translationY = offsetY,
+            rotationZ = rotation
+        )
+
+    val gestureModifier = Modifier
+        .clip(RectangleShape)
+        .background(Color.Black)
+        .onSizeChanged { composableSize = it }
+        .pointerInput(Unit) {
+            detectTransformGestures { _, pan, zoom, _ ->
+                val oldScale = scale
+                scale *= zoom
+                scale = scale.coerceIn(1f, 5f)
+
+                if (scale > 1f) {
+                    val maxOffsetX = (composableSize.width * (scale - 1)) / 2f
+                    val maxOffsetY = (composableSize.height * (scale - 1)) / 2f
+
+                    offsetX = (offsetX + pan.x * oldScale).coerceIn(-maxOffsetX, maxOffsetX)
+                    offsetY = (offsetY + pan.y * oldScale).coerceIn(-maxOffsetY, maxOffsetY)
+                } else {
+                    resetTransform()
                 }
             }
-    ) {
+        }
+
+    Box(modifier = modifier.then(gestureModifier)) {
         AsyncImage(
             model = imageUrl,
             contentDescription = "Gambar Hisense",
             contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer(
-                    scaleX = scale,
-                    scaleY = scale,
-                    translationX = offsetX,
-                    translationY = offsetY,
-                    rotationZ = rotation
-                )
+            modifier = imageModifier
         )
 
-        // Control Buttons for Zoom/Rotate
+        // Control Buttons for Zoom/Rotate/Fullscreen
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(16.dp)
                 .background(Color.Black.copy(alpha = 0.5f), CircleShape)
         ) {
-            IconButton(onClick = {
-                scale = 1f
-                offsetX = 0f
-                offsetY = 0f
-                rotation = 0f
-            }) {
+            IconButton(onClick = { resetTransform() }) {
                 Icon(Icons.Default.Refresh, contentDescription = "Reset View", tint = Color.White)
             }
             IconButton(onClick = { rotation += 90f }) {
                 Icon(Icons.Default.RotateRight, contentDescription = "Rotate", tint = Color.White)
+            }
+            IconButton(onClick = onFullscreenClick) {
+                Icon(Icons.Default.Fullscreen, contentDescription = "Fullscreen", tint = Color.White)
             }
         }
     }
