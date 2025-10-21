@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
@@ -130,6 +131,15 @@ fun HomeScreen(
                             val action = if (isTolak) "tolak" else "terima"
 
                             Button(
+                                onClick = { homeViewModel.skipAndProceed() },
+                                enabled = !uiState.isLoading
+                            ) {
+                                Text("Skip")
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            Button(
                                 onClick = { showConfirmationDialog = action },
                                 enabled = !uiState.isLoading,
                                 colors = if (isTolak) {
@@ -207,6 +217,14 @@ fun AppDrawer(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(text = userName, style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(onClick = {
+                homeViewModel.stopVerval()
+                homeViewModel.fetchPendingRows(userName)
+            }) {
+                Text("Refresh Data")
+            }
             Spacer(modifier = Modifier.height(16.dp))
 
             if (uiState.rowDetails != null) {

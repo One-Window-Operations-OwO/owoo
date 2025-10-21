@@ -92,15 +92,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun fetchPendingRows(verifierName: String) {
+    fun fetchPendingRows(verifierName: String, isRefetch: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null, pendingRows = emptyList())
+            val loadingMessage = if (isRefetch) "Mengecek data yang dilewati..." else null
+            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = loadingMessage, pendingRows = emptyList())
             try {
                 val (header, rows) = withContext(Dispatchers.IO) {
                     GoogleSheetsService.getPendingRows(verifierName)
                 }
-                _uiState.value = _uiState.value.copy(headerRow = header, pendingRows = rows, isLoading = false)
-                cacheManager.savePendingRows(CachedData(header, rows))
+
+                if (rows.isEmpty() && isRefetch) {
+                    _uiState.value = _uiState.value.copy(isLoading = false, rowDetails = null, errorMessage = "Semua data telah diverifikasi.")
+                } else {
+                    _uiState.value = _uiState.value.copy(headerRow = header, pendingRows = rows, isLoading = false)
+                    cacheManager.savePendingRows(CachedData(header, rows))
+                }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(errorMessage = e.message, isLoading = false)
                 cacheManager.clearCache()
@@ -145,27 +151,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (!hisenseData.isGreen) {
-                    withContext(Dispatchers.IO) {
-                        GoogleSheetsService.updateSheet(
-                            sheetId = "1rtLbHvl6qpQiRat4h79vvLlUAqq15dc1b7p81zaQoqM",
-                            rowIndex = rowWithIndex.rowIndex,
-                            action = "formatSkipHitam",
-                            updates = null,
-                            customReason = null
-                        )
-                    }
-
+                    // Auto-skip if not green
                     val currentRows = _uiState.value.pendingRows
                     val newRows = currentRows.drop(1)
-
-                    _uiState.value = _uiState.value.copy(pendingRows = newRows)
-                    cacheManager.savePendingRows(CachedData(_uiState.value.headerRow, newRows))
-
-                    if (newRows.isNotEmpty()) {
-                        fetchRowDetails(newRows.first(), phpsessid)
-                    } else {
-                        _uiState.value = _uiState.value.copy(isLoading = false, rowDetails = null, errorMessage = "Semua data telah diproses.")
-                    }
+                    proceedToNextOrRefetch(newRows)
                     return@launch
                 }
 
@@ -278,19 +267,43 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 val newRows = state.pendingRows.drop(1)
-
-                _uiState.value = _uiState.value.copy(pendingRows = newRows)
-                cacheManager.savePendingRows(CachedData(state.headerRow, newRows))
-
-                if (newRows.isNotEmpty()) {
-                    fetchRowDetails(newRows.first(), cookie)
-                } else {
-                    _uiState.value = _uiState.value.copy(isLoading = false, rowDetails = null, errorMessage = "Semua data telah diproses.")
-                }
+                proceedToNextOrRefetch(newRows)
 
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(errorMessage = e.message, isLoading = false)
             }
+        }
+    }
+
+    fun skipAndProceed() {
+        viewModelScope.launch {
+            val state = _uiState.value
+            if (state.pendingRows.size <= 1) {
+                val newRows = state.pendingRows.drop(1)
+                proceedToNextOrRefetch(newRows)
+                return@launch
+            }
+
+            val newRows = state.pendingRows.drop(1) + state.pendingRows.first()
+            proceedToNextOrRefetch(newRows)
+        }
+    }
+
+    private fun proceedToNextOrRefetch(newRows: List<RowWithIndex>) {
+        val verifierName = sessionManager.getUsername() ?: run {
+            _uiState.value = _uiState.value.copy(errorMessage = "User session not found.", isLoading = false)
+            return
+        }
+
+        _uiState.value = _uiState.value.copy(pendingRows = newRows)
+        cacheManager.savePendingRows(CachedData(_uiState.value.headerRow, newRows))
+
+        if (newRows.isNotEmpty()) {
+            val phpsessid = sessionManager.getCookie() ?: return
+            fetchRowDetails(newRows.first(), phpsessid)
+        } else {
+            // When the list is empty, refetch to check for skipped items
+            fetchPendingRows(verifierName, isRefetch = true)
         }
     }
 
