@@ -220,8 +220,11 @@ fun AppDrawer(
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(onClick = {
-                homeViewModel.stopVerval()
-                homeViewModel.fetchPendingRows(userName)
+                if (uiState.rowDetails != null) {
+                    homeViewModel.refreshCurrentRowDetails()
+                } else {
+                    homeViewModel.fetchPendingRows(userName)
+                }
             }) {
                 Text("Refresh Data")
             }

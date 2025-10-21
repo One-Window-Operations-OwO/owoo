@@ -151,7 +151,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (!hisenseData.isGreen) {
-                    // Auto-skip if not green
+                    withContext(Dispatchers.IO) {
+                        GoogleSheetsService.updateSheet(
+                            sheetId = "1rtLbHvl6qpQiRat4h79vvLlUAqq15dc1b7p81zaQoqM",
+                            rowIndex = rowWithIndex.rowIndex,
+                            action = "formatSkipHitam",
+                            updates = null,
+                            customReason = null
+                        )
+                    }
+
                     val currentRows = _uiState.value.pendingRows
                     val newRows = currentRows.drop(1)
                     proceedToNextOrRefetch(newRows)
@@ -302,8 +311,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val phpsessid = sessionManager.getCookie() ?: return
             fetchRowDetails(newRows.first(), phpsessid)
         } else {
-            // When the list is empty, refetch to check for skipped items
             fetchPendingRows(verifierName, isRefetch = true)
+        }
+    }
+
+    fun refreshCurrentRowDetails() {
+        if (uiState.value.pendingRows.isNotEmpty()) {
+            val phpsessid = sessionManager.getCookie()
+            if (phpsessid != null) {
+                fetchRowDetails(uiState.value.pendingRows.first(), phpsessid)
+            } else {
+                _uiState.value = _uiState.value.copy(errorMessage = "Session expired. Please login again.")
+            }
         }
     }
 
