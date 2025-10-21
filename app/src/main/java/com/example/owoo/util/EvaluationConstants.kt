@@ -76,7 +76,7 @@ object EvaluationConstants {
                 "Tanggal Tidak Ada"
             )
         ),
-        EvaluationField("V", "PESERTA PELATIHAN", listOf("Ada", "Tidak Ada")),
+        EvaluationField("V", "PESERTA PELATIHAN", listOf("Ada", "Tidak Ada", "Media Pelatihan")),
         EvaluationField("W", "KESIMPULAN LENGKAP", listOf("Ya", "Tidak"))
     )
 }
