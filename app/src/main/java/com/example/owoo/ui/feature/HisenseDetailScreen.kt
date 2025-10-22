@@ -19,7 +19,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -31,6 +30,9 @@ import com.example.owoo.data.datadik.Ptk
 import com.example.owoo.ui.home.HomeViewModel
 import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalContext
+import coil.imageLoader
+import coil.request.ImageRequest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,12 +40,25 @@ fun HisenseDetailScreen(
     homeState: HomeState,
     viewModel: HomeViewModel
 ) {
-    val hisenseData = homeState.rowDetails?.hisenseData ?: return // Safety check
+    val hisenseData = homeState.rowDetails?.hisenseData ?: return
     val datadikData = homeState.rowDetails?.datadikData
     val images = remember { hisenseData.images?.filterValues { !it.isNullOrBlank() }?.toList() ?: emptyList() }
     var currentPage by remember { mutableStateOf(0) }
     val scaffoldState = rememberBottomSheetScaffoldState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val imageLoader = context.imageLoader
+
+    LaunchedEffect(hisenseData) {
+        images.forEach { (_, imageUrl) ->
+            if (imageUrl.isNotBlank()) {
+                val request = ImageRequest.Builder(context)
+                    .data(imageUrl)
+                    .build()
+                imageLoader.enqueue(request)
+            }
+        }
+    }
 
     if (scaffoldState.bottomSheetState.isVisible) {
         BackHandler(onBack = {
@@ -66,7 +81,7 @@ fun HisenseDetailScreen(
 
     BottomSheetScaffold(
         scaffoldState = scaffoldState,
-        sheetPeekHeight = 56.dp,
+        sheetPeekHeight = 30.dp,
         sheetContent = {
             EvaluationSheetContent(
                 currentPage = currentPage,
@@ -76,7 +91,6 @@ fun HisenseDetailScreen(
                 rejectionReasonString = homeState.rejectionReasonString,
                 onReasonChange = { viewModel.updateRejectionReason(it) }
             )
-            // Add extra space for the sheet to go behind navigation bars
             Spacer(modifier = Modifier.navigationBarsPadding())
         }
     ) { paddingValues ->
@@ -112,15 +126,24 @@ fun HisenseDetailScreen(
 
                     if (dynamicInfo.isNotEmpty()) {
                         dynamicInfo.forEach { (label, value) ->
-                            Text("$label: $value", style = MaterialTheme.typography.bodySmall)
+                            if (label == "NPSN - Nama") {
+                                Text("$value", style = MaterialTheme.typography.bodySmall)
+                                HorizontalDivider(thickness = 1.dp, color = Color.White)
+                                Spacer(modifier = Modifier.height(1.dp))
+                            } else {
+                                Text("$label: $value", style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     } else {
-                        Text("NPSN: ${hisenseData.schoolInfo?.npsn ?: "N/A"}", style = MaterialTheme.typography.bodyMedium)
-                        Text("Nama: ${hisenseData.schoolInfo?.nama ?: "N/A"}", style = MaterialTheme.typography.bodyMedium)
+                        val npsn = hisenseData.schoolInfo?.npsn ?: "N/A"
+                        val nama = hisenseData.schoolInfo?.nama ?: "N/A"
+                        Text("NPSN - Nama: $npsn - $nama", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(4.dp))
                     }
 
                     if (isBappScreen) {
-                        Spacer(modifier = Modifier.height(16.dp))
                         OutlinedTextField(
                             value = ptkQuery,
                             onValueChange = { ptkQuery = it; selectedPtk = null },
@@ -191,7 +214,6 @@ fun HisenseDetailScreen(
     }
 }
 
-@Composable
 private fun getDynamicInfo(
     currentImageTitle: String,
     hisenseData: com.example.owoo.data.hisense.HisenseData,
@@ -211,10 +233,16 @@ private fun getDynamicInfo(
         return if (parts.isNotEmpty()) parts.joinToString(", ") else "N/A"
     }
 
+    // Helper to add NPSN - Nama
+    fun addNpsnNamaInfo() {
+        val npsn = schoolInfo.npsn ?: "N/A"
+        val nama = schoolInfo.nama ?: "N/A"
+        info.add("NPSN - Nama" to "$npsn - $nama")
+    }
+
     when (currentImageTitle) {
         "Foto Plang Sekolah" -> {
-            info.add("NPSN" to (schoolInfo.npsn ?: "N/A"))
-            info.add("Nama" to (schoolInfo.nama ?: "N/A"))
+            addNpsnNamaInfo()
             info.add("Alamat" to getHisenseFullAddress(schoolInfo))
             info.add("Alamat Datadik" to getDatadikFullAddress(datadikData))
         }
@@ -223,19 +251,18 @@ private fun getDynamicInfo(
             info.add("Alamat Datadik" to getDatadikFullAddress(datadikData))
         }
         "Foto Serial Number" -> {
+            addNpsnNamaInfo()
             info.add("Serial Number" to (schoolInfo.serialNumber ?: "N/A"))
             info.add("Alamat" to getHisenseFullAddress(schoolInfo))
             info.add("Alamat Datadik" to getDatadikFullAddress(datadikData))
         }
         "Foto BAPP Hal 1" -> {
+            addNpsnNamaInfo()
             info.add("Serial Number" to (schoolInfo.serialNumber ?: "N/A"))
-            info.add("NPSN" to (schoolInfo.npsn ?: "N/A"))
-            info.add("Nama" to (schoolInfo.nama ?: "N/A"))
             info.add("PIC" to (schoolInfo.pic ?: "N/A"))
         }
         "Foto BAPP Hal 2" -> {
-            info.add("NPSN" to (schoolInfo.npsn ?: "N/A"))
-            info.add("Nama" to (schoolInfo.nama ?: "N/A"))
+            addNpsnNamaInfo()
             info.add("PIC" to (schoolInfo.pic ?: "N/A"))
         }
     }
@@ -251,12 +278,221 @@ fun ImageViewerWithControls(
     showNavigation: Boolean
 ) {
     var isFullscreen by remember { mutableStateOf(false) }
+    var scale by remember { mutableStateOf(1f) }
+    var offsetX by remember { mutableStateOf(0f) }
+    var offsetY by remember { mutableStateOf(0f) }
+    var rotation by remember { mutableStateOf(0f) }
+    var composableSize by remember { mutableStateOf(IntSize.Zero) }
+    var reloadTrigger by remember { mutableStateOf(0) }
 
-    Box(modifier = modifier) {
-        ZoomableAsyncImage(
-            imageUrl = imageUrl,
-            modifier = Modifier.fillMaxSize(),
-            onFullscreenClick = { isFullscreen = true }
+    // Reset transform state when image url changes
+    LaunchedEffect(imageUrl) {
+        scale = 1f
+        offsetX = 0f
+        offsetY = 0f
+        rotation = 0f
+        reloadTrigger = 0 // Reset reload trigger as well
+    }
+
+    fun resetTransform() {
+        scale = 1f
+        offsetX = 0f
+        offsetY = 0f
+        rotation = 0f
+    }
+
+    Column(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .clip(RectangleShape)
+                .background(Color.Black)
+                .onSizeChanged { composableSize = it }
+                .pointerInput(imageUrl) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        val oldScale = scale
+                        scale *= zoom
+                        scale = scale.coerceIn(1f, 5f)
+
+                        if (scale > 1f) {
+                            val maxOffsetX = (composableSize.width * (scale - 1)) / 2f
+                            val maxOffsetY = (composableSize.height * (scale - 1)) / 2f
+
+                            offsetX = (offsetX + pan.x * oldScale).coerceIn(-maxOffsetX, maxOffsetX)
+                            offsetY = (offsetY + pan.y * oldScale).coerceIn(-maxOffsetY, maxOffsetY)
+                        } else {
+                            resetTransform()
+                        }
+                    }
+                }
+        ) {
+            AsyncImage(
+                model = "$imageUrl?reload=$reloadTrigger", // Append reloadTrigger as a query parameter
+                contentDescription = "Gambar Hisense",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(
+                        scaleX = scale,
+                        scaleY = scale,
+                        translationX = offsetX,
+                        translationY = offsetY,
+                        rotationZ = rotation
+                    )
+            )
+
+            if (showNavigation) {
+                // Previous Area
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxHeight()
+                        .fillMaxWidth(0.2f) // 20% of the width
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onPrevious
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBackIosNew,
+                        contentDescription = "Previous",
+                        tint = Color.White.copy(alpha = 0.4f),
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(48.dp)
+                    )
+                }
+
+                // Next Area
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .fillMaxWidth(0.2f)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onNext
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowForwardIos,
+                        contentDescription = "Next",
+                        tint = Color.White.copy(alpha = 0.4f),
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(48.dp)
+                    )
+                }
+            }
+        }
+
+        // Control Buttons for Zoom/Rotate/Fullscreen
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            IconButton(onClick = { resetTransform() }) {
+                Icon(Icons.Default.Refresh, contentDescription = "Reset View")
+            }
+            IconButton(onClick = { rotation += 90f }) {
+                Icon(Icons.Default.RotateRight, contentDescription = "Rotate")
+            }
+            IconButton(onClick = { reloadTrigger++ }) {
+                Icon(Icons.Default.Autorenew, contentDescription = "Reload Image")
+            }
+            IconButton(onClick = { isFullscreen = true }) {
+                Icon(Icons.Default.Fullscreen, contentDescription = "Fullscreen")
+            }
+        }
+    }
+
+    if (isFullscreen) {
+        Dialog(onDismissRequest = { isFullscreen = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            FullScreenImageViewer(
+                imageUrl = imageUrl,
+                onDismiss = { isFullscreen = false },
+                onPrevious = onPrevious,
+                onNext = onNext,
+                showNavigation = showNavigation
+            )
+        }
+    }
+}
+
+@Composable
+fun FullScreenImageViewer(
+    imageUrl: String,
+    onDismiss: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    showNavigation: Boolean
+) {
+    var scale by remember { mutableStateOf(1f) }
+    var offsetX by remember { mutableStateOf(0f) }
+    var offsetY by remember { mutableStateOf(0f) }
+    var rotation by remember { mutableStateOf(0f) }
+    var composableSize by remember { mutableStateOf(IntSize.Zero) }
+    var reloadTrigger by remember { mutableStateOf(0) }
+
+    // Reset transform state when image url changes
+    LaunchedEffect(imageUrl) {
+        scale = 1f
+        offsetX = 0f
+        offsetY = 0f
+        rotation = 0f
+        reloadTrigger = 0 // Reset reload trigger as well
+    }
+
+    fun resetTransform() {
+        scale = 1f
+        offsetX = 0f
+        offsetY = 0f
+        rotation = 0f
+    }
+
+    val imageModifier = Modifier
+        .fillMaxSize()
+        .graphicsLayer(
+            scaleX = scale,
+            scaleY = scale,
+            translationX = offsetX,
+            translationY = offsetY,
+            rotationZ = rotation
+        )
+
+    val gestureModifier = Modifier
+        .clip(RectangleShape)
+        .background(Color.Black)
+        .onSizeChanged { composableSize = it }
+        .pointerInput(Unit) {
+            detectTransformGestures { _, pan, zoom, _ ->
+                val oldScale = scale
+                scale *= zoom
+                scale = scale.coerceIn(1f, 5f)
+
+                if (scale > 1f) {
+                    val maxOffsetX = (composableSize.width * (scale - 1)) / 2f
+                    val maxOffsetY = (composableSize.height * (scale - 1)) / 2f
+
+                    offsetX = (offsetX + pan.x * oldScale).coerceIn(-maxOffsetX, maxOffsetX)
+                    offsetY = (offsetY + pan.y * oldScale).coerceIn(-maxOffsetY, maxOffsetY)
+                } else {
+                    resetTransform()
+                }
+            }
+        }
+
+    Box(modifier = Modifier.fillMaxSize().then(gestureModifier)) {
+        AsyncImage(
+            model = "$imageUrl?reload=$reloadTrigger", // Append reloadTrigger as a query parameter
+            contentDescription = "Gambar Hisense",
+            contentScale = ContentScale.Fit,
+            modifier = imageModifier
         )
 
         if (showNavigation) {
@@ -304,88 +540,6 @@ fun ImageViewerWithControls(
                 )
             }
         }
-    }
-
-    if (isFullscreen) {
-        Dialog(onDismissRequest = { isFullscreen = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-                ZoomableAsyncImage(
-                    imageUrl = imageUrl,
-                    modifier = Modifier.fillMaxSize(),
-                    onFullscreenClick = { isFullscreen = false } // To close fullscreen
-                )
-            }
-        }
-    }
-}
-
-
-@Composable
-fun ZoomableAsyncImage(
-    imageUrl: String,
-    modifier: Modifier = Modifier,
-    onFullscreenClick: () -> Unit
-) {
-    var scale by remember { mutableStateOf(1f) }
-    var offsetX by remember { mutableStateOf(0f) }
-    var offsetY by remember { mutableStateOf(0f) }
-    var rotation by remember { mutableStateOf(0f) }
-    var composableSize by remember { mutableStateOf(IntSize.Zero) }
-
-    // Reset transform state when image url changes
-    LaunchedEffect(imageUrl) {
-        scale = 1f
-        offsetX = 0f
-        offsetY = 0f
-        rotation = 0f
-    }
-
-    fun resetTransform() {
-        scale = 1f
-        offsetX = 0f
-        offsetY = 0f
-        rotation = 0f
-    }
-
-    val imageModifier = Modifier
-        .fillMaxSize()
-        .graphicsLayer(
-            scaleX = scale,
-            scaleY = scale,
-            translationX = offsetX,
-            translationY = offsetY,
-            rotationZ = rotation
-        )
-
-    val gestureModifier = Modifier
-        .clip(RectangleShape)
-        .background(Color.Black)
-        .onSizeChanged { composableSize = it }
-        .pointerInput(Unit) {
-            detectTransformGestures { _, pan, zoom, _ ->
-                val oldScale = scale
-                scale *= zoom
-                scale = scale.coerceIn(1f, 5f)
-
-                if (scale > 1f) {
-                    val maxOffsetX = (composableSize.width * (scale - 1)) / 2f
-                    val maxOffsetY = (composableSize.height * (scale - 1)) / 2f
-
-                    offsetX = (offsetX + pan.x * oldScale).coerceIn(-maxOffsetX, maxOffsetX)
-                    offsetY = (offsetY + pan.y * oldScale).coerceIn(-maxOffsetY, maxOffsetY)
-                } else {
-                    resetTransform()
-                }
-            }
-        }
-
-    Box(modifier = modifier.then(gestureModifier)) {
-        AsyncImage(
-            model = imageUrl,
-            contentDescription = "Gambar Hisense",
-            contentScale = ContentScale.Fit,
-            modifier = imageModifier
-        )
 
         // Control Buttons for Zoom/Rotate/Fullscreen
         Row(
@@ -400,8 +554,11 @@ fun ZoomableAsyncImage(
             IconButton(onClick = { rotation += 90f }) {
                 Icon(Icons.Default.RotateRight, contentDescription = "Rotate", tint = Color.White)
             }
-            IconButton(onClick = onFullscreenClick) {
-                Icon(Icons.Default.Fullscreen, contentDescription = "Fullscreen", tint = Color.White)
+            IconButton(onClick = { reloadTrigger++ }) {
+                Icon(Icons.Default.Autorenew, contentDescription = "Reload Image", tint = Color.White)
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Default.FullscreenExit, contentDescription = "Exit Fullscreen", tint = Color.White)
             }
         }
     }
