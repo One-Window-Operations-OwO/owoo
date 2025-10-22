@@ -45,6 +45,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     init {
         val cachedData = cacheManager.loadPendingRows()
         val savedJson = sessionManager.getServiceAccountJson()
+        if (savedJson != null) { 
+            GoogleSheetsService.initialize(savedJson)
+        }
         if (cachedData != null) {
             _uiState.value = _uiState.value.copy(headerRow = cachedData.header, pendingRows = cachedData.rows, serviceAccountJson = savedJson)
         } else {
