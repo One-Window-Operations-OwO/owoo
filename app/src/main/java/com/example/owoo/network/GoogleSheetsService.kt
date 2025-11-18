@@ -102,10 +102,20 @@ object GoogleSheetsService {
 
             val data = mutableListOf<ValueRange>()
             updates.forEach { (column, value) ->
-                val valueRange = ValueRange()
-                    .setRange("'Lembar Kerja'!$column$rowIndex")
-                    .setValues(listOf(listOf(value)))
-                data.add(valueRange)
+                if (column != "X") {
+                    val valueRange = ValueRange()
+                        .setRange("'Lembar Kerja'!$column$rowIndex")
+                        .setValues(listOf(listOf(value)))
+                    data.add(valueRange)
+                }
+            }
+
+            if (updates.containsKey("X")) {
+                data.add(
+                    ValueRange()
+                        .setRange("'Lembar Kerja'!Z$rowIndex")
+                        .setValues(listOf(listOf(updates["X"])))
+                )
             }
 
             if (updates["N"] == "Sesuai") {
@@ -134,8 +144,8 @@ object GoogleSheetsService {
                 .setData(data)
 
             service.spreadsheets().values().batchUpdate(sheetId, requestBody).execute()
-
-        } else {
+        }
+        else {
             val requests = mutableListOf<Request>()
 
             val backgroundColor = if (action == "formatSkip") {

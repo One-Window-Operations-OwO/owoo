@@ -134,8 +134,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 isLoading = true,
                 rowDetails = null, 
                 errorMessage = null,
-                evaluationForm = EvaluationConstants.defaultEvaluationValues, 
-                rejectionMessages = emptyList(), 
+                rejectionMessages = emptyList(),
                 rejectionReasonString = "" 
             )
             try {
@@ -177,6 +176,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (datadikData.error != null) {
                     throw Exception("Datadik error: ${datadikData.error}")
                 }
+                val installationDate = hisenseData.itgle ?: ""
+
+                val newEvaluation = EvaluationConstants.defaultEvaluationValues.toMutableMap()
+                newEvaluation["X"] = installationDate
+
+                _uiState.value = _uiState.value.copy(
+                    evaluationForm = newEvaluation
+                )
 
                 _uiState.value = _uiState.value.copy(
                     rowDetails = RowDetails(hisenseData, datadikData),

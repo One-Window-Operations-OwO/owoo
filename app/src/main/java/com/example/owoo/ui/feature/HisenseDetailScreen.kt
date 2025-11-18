@@ -33,6 +33,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.ui.platform.LocalContext
 import coil.imageLoader
 import coil.request.ImageRequest
+import androidx.compose.foundation.gestures.detectTapGestures
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -192,6 +195,7 @@ fun HisenseDetailScreen(
                 showNavigation = images.size > 1
             )
 
+
             // Pager Indicator
             Row(
                 Modifier
@@ -285,42 +289,50 @@ fun ImageViewerWithControls(
     var composableSize by remember { mutableStateOf(IntSize.Zero) }
     var reloadTrigger by remember { mutableStateOf(0) }
 
-    // Reset transform state when image url changes
     LaunchedEffect(imageUrl) {
         scale = 1f
         offsetX = 0f
         offsetY = 0f
         rotation = 0f
-        reloadTrigger = 0 // Reset reload trigger as well
     }
 
     fun resetTransform() {
         scale = 1f
         offsetX = 0f
         offsetY = 0f
-        rotation = 0f
     }
 
     Column(modifier = modifier) {
+
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .clip(RectangleShape)
                 .background(Color.Black)
                 .onSizeChanged { composableSize = it }
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onDoubleTap = {
+                            if (scale < 2f) {
+                                scale = 2.5f
+                            } else {
+                                resetTransform()
+                            }
+                        }
+                    )
+                }
                 .pointerInput(imageUrl) {
                     detectTransformGestures { _, pan, zoom, _ ->
-                        val oldScale = scale
-                        scale *= zoom
-                        scale = scale.coerceIn(1f, 5f)
+
+                        val prevScale = scale
+                        scale = (scale * zoom).coerceIn(1f, 4f)
 
                         if (scale > 1f) {
-                            val maxOffsetX = (composableSize.width * (scale - 1)) / 2f
-                            val maxOffsetY = (composableSize.height * (scale - 1)) / 2f
+                            val maxX = (composableSize.width * (scale - 1)) / 2f
+                            val maxY = (composableSize.height * (scale - 1)) / 2f
 
-                            offsetX = (offsetX + pan.x * oldScale).coerceIn(-maxOffsetX, maxOffsetX)
-                            offsetY = (offsetY + pan.y * oldScale).coerceIn(-maxOffsetY, maxOffsetY)
+                            offsetX = (offsetX + pan.x * prevScale).coerceIn(-maxX, maxX)
+                            offsetY = (offsetY + pan.y * prevScale).coerceIn(-maxY, maxY)
                         } else {
                             resetTransform()
                         }
@@ -328,9 +340,8 @@ fun ImageViewerWithControls(
                 }
         ) {
             AsyncImage(
-                model = "$imageUrl?reload=$reloadTrigger", // Append reloadTrigger as a query parameter
-                contentDescription = "Gambar Hisense",
-                contentScale = ContentScale.Fit,
+                model = "$imageUrl?reload=$reloadTrigger",
+                contentDescription = null,
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer(
@@ -339,57 +350,28 @@ fun ImageViewerWithControls(
                         translationX = offsetX,
                         translationY = offsetY,
                         rotationZ = rotation
-                    )
+                    ),
+                contentScale = ContentScale.Fit
             )
 
             if (showNavigation) {
-                // Previous Area
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .fillMaxHeight()
-                        .fillMaxWidth(0.2f) // 20% of the width
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = onPrevious
-                        )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBackIosNew,
-                        contentDescription = "Previous",
-                        tint = Color.White.copy(alpha = 0.4f),
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .size(48.dp)
-                    )
-                }
-
-                // Next Area
+                        .fillMaxWidth(0.2f)
+                        .clickable { onPrevious() }
+                )
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .fillMaxHeight()
                         .fillMaxWidth(0.2f)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = onNext
-                        )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowForwardIos,
-                        contentDescription = "Next",
-                        tint = Color.White.copy(alpha = 0.4f),
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .size(48.dp)
-                    )
-                }
+                        .clickable { onNext() }
+                )
             }
         }
 
-        // Control Buttons for Zoom/Rotate/Fullscreen
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -397,22 +379,22 @@ fun ImageViewerWithControls(
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             IconButton(onClick = { resetTransform() }) {
-                Icon(Icons.Default.Refresh, contentDescription = "Reset View")
+                Icon(Icons.Default.Refresh, contentDescription = null)
             }
             IconButton(onClick = { rotation += 90f }) {
-                Icon(Icons.Default.RotateRight, contentDescription = "Rotate")
+                Icon(Icons.Default.RotateRight, contentDescription = null)
             }
             IconButton(onClick = { reloadTrigger++ }) {
-                Icon(Icons.Default.Autorenew, contentDescription = "Reload Image")
+                Icon(Icons.Default.Autorenew, contentDescription = null)
             }
             IconButton(onClick = { isFullscreen = true }) {
-                Icon(Icons.Default.Fullscreen, contentDescription = "Fullscreen")
+                Icon(Icons.Default.Fullscreen, contentDescription = null)
             }
         }
     }
 
     if (isFullscreen) {
-        Dialog(onDismissRequest = { isFullscreen = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Dialog(onDismissRequest = { isFullscreen = false }) {
             FullScreenImageViewer(
                 imageUrl = imageUrl,
                 onDismiss = { isFullscreen = false },
@@ -439,127 +421,71 @@ fun FullScreenImageViewer(
     var composableSize by remember { mutableStateOf(IntSize.Zero) }
     var reloadTrigger by remember { mutableStateOf(0) }
 
-    // Reset transform state when image url changes
     LaunchedEffect(imageUrl) {
         scale = 1f
         offsetX = 0f
         offsetY = 0f
         rotation = 0f
-        reloadTrigger = 0 // Reset reload trigger as well
+        reloadTrigger = 0
     }
 
     fun resetTransform() {
         scale = 1f
         offsetX = 0f
         offsetY = 0f
-        rotation = 0f
     }
 
-    val imageModifier = Modifier
-        .fillMaxSize()
-        .graphicsLayer(
-            scaleX = scale,
-            scaleY = scale,
-            translationX = offsetX,
-            translationY = offsetY,
-            rotationZ = rotation
-        )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .onSizeChanged { composableSize = it }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onDoubleTap = {
+                        if (scale <= 1f) scale = 2.4f
+                        else resetTransform()
+                    }
+                )
+            }
+            .pointerInput(imageUrl) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    val oldScale = scale
+                    scale *= zoom
+                    scale = scale.coerceIn(1f, 5f)
 
-    val gestureModifier = Modifier
-        .clip(RectangleShape)
-        .background(Color.Black)
-        .onSizeChanged { composableSize = it }
-        .pointerInput(Unit) {
-            detectTransformGestures { _, pan, zoom, _ ->
-                val oldScale = scale
-                scale *= zoom
-                scale = scale.coerceIn(1f, 5f)
+                    if (scale > 1f) {
+                        val maxOffsetX = (composableSize.width * (scale - 1)) / 2f
+                        val maxOffsetY = (composableSize.height * (scale - 1)) / 2f
 
-                if (scale > 1f) {
-                    val maxOffsetX = (composableSize.width * (scale - 1)) / 2f
-                    val maxOffsetY = (composableSize.height * (scale - 1)) / 2f
-
-                    offsetX = (offsetX + pan.x * oldScale).coerceIn(-maxOffsetX, maxOffsetX)
-                    offsetY = (offsetY + pan.y * oldScale).coerceIn(-maxOffsetY, maxOffsetY)
-                } else {
-                    resetTransform()
+                        offsetX = (offsetX + pan.x * oldScale).coerceIn(-maxOffsetX, maxOffsetX)
+                        offsetY = (offsetY + pan.y * oldScale).coerceIn(-maxOffsetY, maxOffsetY)
+                    } else resetTransform()
                 }
             }
-        }
-
-    Box(modifier = Modifier.fillMaxSize().then(gestureModifier)) {
+    ) {
         AsyncImage(
-            model = "$imageUrl?reload=$reloadTrigger", // Append reloadTrigger as a query parameter
-            contentDescription = "Gambar Hisense",
+            model = "$imageUrl?reload=$reloadTrigger",
+            contentDescription = null,
             contentScale = ContentScale.Fit,
-            modifier = imageModifier
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer(
+                    scaleX = scale,
+                    scaleY = scale,
+                    translationX = offsetX,
+                    translationY = offsetY,
+                    rotationZ = rotation
+                )
         )
 
-        if (showNavigation) {
-            // Previous Area
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .fillMaxHeight()
-                    .fillMaxWidth(0.2f) // 20% of the width
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onPrevious
-                    )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBackIosNew,
-                    contentDescription = "Previous",
-                    tint = Color.White.copy(alpha = 0.4f),
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(48.dp)
-                )
-            }
-
-            // Next Area
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .fillMaxHeight()
-                    .fillMaxWidth(0.2f)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onNext
-                    )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ArrowForwardIos,
-                    contentDescription = "Next",
-                    tint = Color.White.copy(alpha = 0.4f),
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(48.dp)
-                )
-            }
-        }
-
-        // Control Buttons for Zoom/Rotate/Fullscreen
-        Row(
+        IconButton(
+            onClick = onDismiss,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
+                .align(Alignment.TopEnd)
                 .padding(16.dp)
-                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
         ) {
-            IconButton(onClick = { resetTransform() }) {
-                Icon(Icons.Default.Refresh, contentDescription = "Reset View", tint = Color.White)
-            }
-            IconButton(onClick = { rotation += 90f }) {
-                Icon(Icons.Default.RotateRight, contentDescription = "Rotate", tint = Color.White)
-            }
-            IconButton(onClick = { reloadTrigger++ }) {
-                Icon(Icons.Default.Autorenew, contentDescription = "Reload Image", tint = Color.White)
-            }
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Default.FullscreenExit, contentDescription = "Exit Fullscreen", tint = Color.White)
-            }
+            Icon(Icons.Default.FullscreenExit, null, tint = Color.White)
         }
     }
 }

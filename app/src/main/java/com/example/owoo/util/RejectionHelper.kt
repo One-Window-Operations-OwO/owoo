@@ -44,7 +44,8 @@ object RejectionHelper {
             "Tidak Sesuai" to "(1Q) Ceklis BAPP tidak sesuai pada halaman 2",
             "BAPP Tidak Jelas" to "(1T) BAPP Halaman 2 tidak terlihat jelas",
             "Diedit" to "(1Z) BAPP Hal 2 tidak boleh diedit digital",
-            "Tanggal Tidak Ada" to "(1F) Tanggal BAPP tidak diisi"
+            "Tanggal Tidak Ada" to "(1F) Tanggal BAPP tidak diisi",
+            "Tanggal Tidak Konsisten" to "(1E) Tanggal pada halaman 2 tidak sesuai dengan halaman 1"
         ),
         "V" to mapOf(
             "Media Pelatihan" to "(1AC) Harap ceklis di luar jaringan pada media pelatihan (jangan double ceklis/tidak ceklis)"

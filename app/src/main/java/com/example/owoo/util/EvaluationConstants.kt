@@ -20,7 +20,8 @@ object EvaluationConstants {
         "T" to "Sesuai",
         "U" to "Lengkap",
         "V" to "Ada",
-        "W" to "Ya"
+        "W" to "Ya",
+        "X" to ""
     )
 
     val evaluationFields: List<EvaluationField> = listOf(
@@ -73,10 +74,17 @@ object EvaluationConstants {
                 "Tidak Sesuai",
                 "BAPP Tidak Jelas",
                 "Diedit",
-                "Tanggal Tidak Ada"
+                "Tanggal Tidak Ada",
+                "Tanggal Tidak Konsisten"
             )
         ),
         EvaluationField("V", "PESERTA PELATIHAN", listOf("Ada", "Tidak Ada", "Media Pelatihan")),
-        EvaluationField("W", "KESIMPULAN LENGKAP", listOf("Ya", "Tidak"))
+        EvaluationField("W", "KESIMPULAN LENGKAP", listOf("Ya", "Tidak")),
+        EvaluationField(
+            col = "X",
+            label = "TANGGAL INSTALASI SELESAI",
+            options = emptyList()
+        )
+
     )
 }
