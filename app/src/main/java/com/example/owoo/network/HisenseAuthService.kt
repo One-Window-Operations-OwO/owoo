@@ -20,7 +20,6 @@ object HisenseAuthService {
                 conn.requestMethod = "POST"
                 conn.doOutput = true
                 conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-                conn.setRequestProperty("Content-Length", postData.length.toString())
                 conn.instanceFollowRedirects = false
 
                 conn.outputStream.use { os ->
@@ -46,7 +45,7 @@ object HisenseAuthService {
     suspend fun validateHisenseCookie(cookie: String): Result<String?> {
         return withContext(Dispatchers.IO) {
             try {
-                val url = URL("${hisenseUrl}index.php")
+                val url = URL("${hisenseUrl}r_dkm.php")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "GET"
                 conn.setRequestProperty("Cookie", "PHPSESSID=$cookie")
@@ -57,7 +56,7 @@ object HisenseAuthService {
 
                 val html = conn.inputStream.bufferedReader().use { it.readText() }
                 val doc = Jsoup.parse(html)
-                val buttonText = doc.select("button.dropdown-toggle").text().trim()
+                val buttonText = doc.select(".dropdown-toggle").text().trim()
 
                 if (buttonText.isNotEmpty()) {
                     Result.success(buttonText)

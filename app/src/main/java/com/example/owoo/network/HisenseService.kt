@@ -123,6 +123,34 @@ object HisenseService {
         }
     }
 
+    fun getIsGreen(npsn: String, cookie: String): HisenseData {
+        try {
+            if (cookie.isEmpty()) {
+                return HisenseData(isGreen = false, error = "Cookie PHPSESSID diperlukan")
+            }
+
+            // 1. Fetch the initial monitoring page
+            val initialUrl = "${hisenseUrl}r_monitoring.php?inpsn=$npsn"
+            val conn1 = URL(initialUrl).openConnection() as HttpURLConnection
+            conn1.requestMethod = "GET"
+            conn1.setRequestProperty("Cookie", "PHPSESSID=$cookie")
+
+            val html1 = conn1.inputStream.bufferedReader().readText()
+            val doc1 = Jsoup.parse(html1)
+
+            val firstRow = doc1.select("#main-content > div > div > div > div.table-container > div > table > tbody tr").first()
+            val firstTdStyle = firstRow?.select("td")?.first()?.attr("style") ?: ""
+            val isGreen = firstTdStyle.contains("color:green")
+
+            return HisenseData(
+                isGreen = isGreen,
+            )
+
+        } catch (e: Exception) {
+            return HisenseData(isGreen = false, error = e.message)
+        }
+    }
+
     @Throws(IOException::class)
     fun makeHisenseRequest(path: String, cookie: String): HisenseResponse {
         val url = "$hisenseUrl$path"

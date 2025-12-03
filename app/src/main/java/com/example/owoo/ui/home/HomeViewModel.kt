@@ -32,7 +32,8 @@ data class HomeState(
     val rowDetails: RowDetails? = null,
     val evaluationForm: Map<String, String> = EvaluationConstants.defaultEvaluationValues,
     val rejectionMessages: List<String> = emptyList(),
-    val rejectionReasonString: String = ""
+    val rejectionReasonString: String = "",
+    val showRetryDialogForNpsn: String? = null
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -41,6 +42,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val sessionManager = SessionManager(application)
     private val _uiState = MutableStateFlow(HomeState())
     val uiState = _uiState.asStateFlow()
+    private val prefetchCache = mutableMapOf<String, HisenseData>()
 
     init {
         val cachedData = cacheManager.loadPendingRows()
@@ -132,20 +134,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isLoading = true,
-                rowDetails = null, 
+                rowDetails = null,
                 errorMessage = null,
                 rejectionMessages = emptyList(),
-                rejectionReasonString = "" 
+                rejectionReasonString = ""
             )
             try {
                 val npsnIndex = _uiState.value.headerRow.indexOf("NPSN")
-                if (npsnIndex == -1) {
-                    throw IllegalStateException("Kolom NPSN tidak ditemukan.")
-                }
+                if (npsnIndex == -1) throw IllegalStateException("Kolom NPSN tidak ditemukan.")
                 val npsn = rowWithIndex.rowData[npsnIndex]
 
-                val hisenseData = withContext(Dispatchers.IO) {
-                    HisenseService.getHisense(npsn, phpsessid)
+                // 1. Check cache first
+                val cachedHisenseData = prefetchCache[npsn]
+                val hisenseData = if (cachedHisenseData != null) {
+                    prefetchCache.remove(npsn) // Use and remove from cache
+                    cachedHisenseData
+                } else {
+                    // 2. If not in cache, fetch from network
+                    withContext(Dispatchers.IO) {
+                        HisenseService.getHisense(npsn, phpsessid)
+                    }
                 }
 
                 if (hisenseData.error != null) {
@@ -162,7 +170,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                             customReason = null
                         )
                     }
-
                     val currentRows = _uiState.value.pendingRows
                     val newRows = currentRows.drop(1)
                     proceedToNextOrRefetch(newRows)
@@ -172,25 +179,34 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 val datadikData = withContext(Dispatchers.IO) {
                     DatadikService.getDatadik(npsn)
                 }
-
                 if (datadikData.error != null) {
                     throw Exception("Datadik error: ${datadikData.error}")
                 }
                 val installationDate = hisenseData.itgle ?: ""
-
                 val newEvaluation = EvaluationConstants.defaultEvaluationValues.toMutableMap()
                 newEvaluation["X"] = installationDate
 
                 _uiState.value = _uiState.value.copy(
-                    evaluationForm = newEvaluation
-                )
-
-                _uiState.value = _uiState.value.copy(
+                    evaluationForm = newEvaluation,
                     rowDetails = RowDetails(hisenseData, datadikData),
                     isLoading = false
                 )
-            }
-            catch (e: Exception) {
+
+                val nextRow = _uiState.value.pendingRows.getOrNull(1)
+                if (nextRow != null) {
+                    val nextNpsn = nextRow.rowData.getOrNull(npsnIndex)
+                    if (nextNpsn != null && !prefetchCache.containsKey(nextNpsn)) {
+                        viewModelScope.launch(Dispatchers.IO) {
+                            val nextCookie = sessionManager.getCookie() ?: return@launch
+                            val prefetchedData = HisenseService.getHisense(nextNpsn, nextCookie)
+                            if (prefetchedData.error == null) {
+                                prefetchCache[nextNpsn] = prefetchedData
+                            }
+                        }
+                    }
+                }
+
+            } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(errorMessage = e.message, isLoading = false)
             }
         }
@@ -211,85 +227,98 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun updateSheetAndProceed(action: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-            try {
-                val state = _uiState.value
-                if (state.pendingRows.isEmpty()) throw IllegalStateException("Tidak ada data untuk diupdate.")
+            
+            val state = _uiState.value
+            if (state.pendingRows.isEmpty()) {
+                _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = "Tidak ada data untuk diupdate.")
+                return@launch
+            }
 
-                val currentRow = state.pendingRows.first()
-                val dkmData = state.rowDetails?.hisenseData ?: throw IllegalStateException("Tidak ada data DKM untuk diupdate.")
-                val cookie = sessionManager.getCookie() ?: throw IllegalStateException("Cookie Hisense tidak ditemukan.")
+            val currentRow = state.pendingRows.first()
+            val dkmData = state.rowDetails?.hisenseData ?: run {
+                _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = "Tidak ada data DKM untuk diupdate.")
+                return@launch
+            }
+            val npsn = dkmData.npsn ?: run {
+                _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = "NPSN tidak ditemukan.")
+                return@launch
+            }
 
-                val validationResult = withContext(Dispatchers.IO) {
-                    HisenseAuthService.validateHisenseCookie(cookie)
-                }
-                if (validationResult.isFailure) {
-                    throw IllegalStateException("Cookie Hisense kadaluarsa atau tidak valid.")
-                }
+            // 1. Immediately proceed to the next row for a non-blocking UI
+            val newRows = state.pendingRows.drop(1)
+            proceedToNextOrRefetch(newRows)
 
-                val params = mutableMapOf<String, String>()
-                params["q"] = dkmData.q ?: ""
-                params["s"] = ""
-                params["v"] = ""
-                params["npsn"] = dkmData.npsn ?: ""
-                params["iprop"] = dkmData.iprop ?: ""
-                params["ikab"] = dkmData.ikab ?: ""
-                params["ikec"] = dkmData.ikec ?: ""
-                params["iins"] = dkmData.iins ?: ""
-                params["ijenjang"] = dkmData.ijenjang ?: ""
-                params["ibp"] = dkmData.ibp ?: ""
-                params["iss"] = dkmData.iss ?: ""
-                params["isf"] = dkmData.isf ?: ""
-                params["istt"] = dkmData.istt ?: ""
-                params["itgl"] = dkmData.itgl ?: ""
-                params["itgla"] = dkmData.itgla ?: ""
-                params["itgle"] = dkmData.itgle ?: ""
-                params["ipet"] = dkmData.ipet ?: ""
-                params["ihnd"] = dkmData.ihnd ?: ""
+            // 2. Launch the actual processing in the background
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val username = sessionManager.getUsername() ?: throw IllegalStateException("Username tidak ditemukan di session.")
+                    val password = sessionManager.getPassword() ?: throw IllegalStateException("Password tidak ditemukan di session.")
+                    val loginResult = HisenseAuthService.loginHisense(username, password)
+                    val cookie = loginResult.getOrNull() ?: throw IllegalStateException("Gagal login ulang ke Hisense.")
 
-                when (action) {
-                    "terima" -> {
-                        params["s"] = "A"
+                    // B. Prepare and send the update to Hisense
+                    val params = mutableMapOf<String, String>()
+                    params["q"] = dkmData.q ?: ""
+                    params["s"] = ""
+                    params["v"] = ""
+                    params["npsn"] = npsn
+                    params["iprop"] = dkmData.iprop ?: ""
+                    params["ikab"] = dkmData.ikab ?: ""
+                    params["ikec"] = dkmData.ikec ?: ""
+                    params["iins"] = dkmData.iins ?: ""
+                    params["ijenjang"] = dkmData.ijenjang ?: ""
+                    params["ibp"] = dkmData.ibp ?: ""
+                    params["iss"] = dkmData.iss ?: ""
+                    params["isf"] = dkmData.isf ?: ""
+                    params["istt"] = dkmData.istt ?: ""
+                    params["itgl"] = dkmData.itgl ?: ""
+                    params["itgla"] = dkmData.itgla ?: ""
+                    params["itgle"] = dkmData.itgle ?: ""
+                    params["ipet"] = dkmData.ipet ?: ""
+                    params["ihnd"] = dkmData.ihnd ?: ""
+
+                    when (action) {
+                        "terima" -> params["s"] = "A"
+                        "tolak" -> {
+                            params["s"] = "R"
+                            params["v"] = state.rejectionReasonString
+                        }
                     }
-                    "tolak" -> {
-                        params["s"] = "R"
-                        params["v"] = state.rejectionReasonString
+
+                    val hisenseQueryString = params.map { (k, v) -> "${Uri.encode(k)}=${Uri.encode(v)}" }.joinToString("&")
+                    val hisensePath = "r_dkm_apr_p.php?$hisenseQueryString"
+                    val hisenseRes = HisenseService.makeHisenseRequest(hisensePath, cookie)
+                    if (!hisenseRes.isSuccessful) {
+                        throw Exception("Gagal update Hisense: ${hisenseRes.body}")
                     }
+
+                    val verificationData = HisenseService.getIsGreen(npsn, cookie)
+
+                    if (verificationData.isGreen) {
+                        val updatedPendingRows = _uiState.value.pendingRows + currentRow
+                        _uiState.value = _uiState.value.copy(pendingRows = updatedPendingRows)
+                        cacheManager.savePendingRows(CachedData(_uiState.value.headerRow, updatedPendingRows))
+                    } else {
+                        val generatedReason = generateRejectionMessage(state.evaluationForm)
+                        val customReason = state.rejectionReasonString
+                        val finalCustomReason = if (customReason.isNotEmpty() && customReason != generatedReason) {
+                            customReason
+                        } else {
+                            null
+                        }
+                        GoogleSheetsService.updateSheet(
+                            sheetId = "1rtLbHvl6qpQiRat4h79vvLlUAqq15dc1b7p81zaQoqM",
+                            rowIndex = currentRow.rowIndex,
+                            action = "update",
+                            updates = state.evaluationForm,
+                            customReason = finalCustomReason
+                        )
+                    }
+                } catch (e: Exception) {
+                    val updatedPendingRows = _uiState.value.pendingRows + currentRow
+                    _uiState.value = _uiState.value.copy(pendingRows = updatedPendingRows)
+                    cacheManager.savePendingRows(CachedData(_uiState.value.headerRow, updatedPendingRows))
                 }
-
-                val hisenseQueryString = params.map { (k, v) -> "${Uri.encode(k)}=${Uri.encode(v)}" }.joinToString("&")
-                val hisensePath = "r_dkm_apr_p.php?$hisenseQueryString"
-
-                val hisenseRes = withContext(Dispatchers.IO) {
-                    HisenseService.makeHisenseRequest(hisensePath, cookie)
-                }
-
-                if (!hisenseRes.isSuccessful) {
-                    throw Exception("Gagal update Hisense: ${hisenseRes.body}")
-                }
-
-                val generatedReason = generateRejectionMessage(state.evaluationForm)
-                val customReason = state.rejectionReasonString
-                val finalCustomReason = if (customReason.isNotEmpty() && customReason != generatedReason) {
-                    customReason
-                } else {
-                    null
-                }
-
-                withContext(Dispatchers.IO) {
-                    GoogleSheetsService.updateSheet(
-                        sheetId = "1rtLbHvl6qpQiRat4h79vvLlUAqq15dc1b7p81zaQoqM",
-                        rowIndex = currentRow.rowIndex,
-                        action = "update",
-                        updates = state.evaluationForm,
-                        customReason = finalCustomReason
-                    )
-                }
-
-                val newRows = state.pendingRows.drop(1)
-                proceedToNextOrRefetch(newRows)
-
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(errorMessage = e.message, isLoading = false)
             }
         }
     }
