@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import coil.imageLoader
 import com.example.owoo.data.datadik.DatadikData
 import com.example.owoo.data.hisense.HisenseData
 import com.example.owoo.network.DatadikService
@@ -17,6 +18,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import coil.imageLoader
+import coil.request.ImageRequest
 
 data class RowDetails(
     val hisenseData: HisenseData,
@@ -182,7 +185,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (datadikData.error != null) {
                     throw Exception("Datadik error: ${datadikData.error}")
                 }
-                val installationDate = hisenseData.itgle ?: ""
+
+                val imageLoader = getApplication<Application>().imageLoader
+                hisenseData.images?.values?.forEach { imageUrl ->
+                    if (imageUrl.isNotBlank()) {
+                        val request = ImageRequest.Builder(getApplication())
+                            .data(imageUrl)
+                            .build()
+                        imageLoader.enqueue(request)
+                    }
+                }
+                
+                val installationDate = hisenseData.processHistory?.find { it.status == "INSTALASI SELESAI" }?.tanggal ?: ""
                 val newEvaluation = EvaluationConstants.defaultEvaluationValues.toMutableMap()
                 newEvaluation["X"] = installationDate
 
@@ -201,6 +215,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                             val prefetchedData = HisenseService.getHisense(nextNpsn, nextCookie)
                             if (prefetchedData.error == null) {
                                 prefetchCache[nextNpsn] = prefetchedData
+
+                                // Preload images into Coil's cache
+                                val imageLoader = getApplication<Application>().imageLoader
+                                prefetchedData.images?.values?.forEach { imageUrl ->
+                                    if (imageUrl.isNotBlank()) {
+                                        val request = ImageRequest.Builder(getApplication())
+                                            .data(imageUrl)
+                                            .build()
+                                        imageLoader.enqueue(request)
+                                    }
+                                }
                             }
                         }
                     }
